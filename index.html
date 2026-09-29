@@ -1,0 +1,1724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Generate VB Report v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F4F4F1; --surface:#FFFFFF; --surface-2:#EEEEEA; --ink:#1B1D1F; --muted:#55595E; --faint:#8A8D91;
+  --line:#D9D9D3; --dash:#A9ACA4;
+  --accent:#1F4FD1; --accent-ink:#FFFFFF; --accent-soft:#EAEFFB; --accent-hover:#163A9E;
+  --ok:#1E7A46; --ok-soft:#E4F2EA; --warn:#8A5300; --warn-soft:#FCF1DC; --warn-line:#D9A441;
+  --err:#B42318; --err-soft:#FFF7F6; --err-chip:#FBE5E2;
+  --disabled-bg:#E2E3DE; --disabled-ink:#6E7176;
+  --sans:'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141516; --surface:#1D1F21; --surface-2:#26282B; --ink:#ECECE8; --muted:#A8ABAF; --faint:#7D8084;
+    --line:#34373B; --dash:#55595E;
+    --accent:#7FA2FF; --accent-ink:#0E1A3A; --accent-soft:#1E2A4A; --accent-hover:#A6BFFF;
+    --ok:#5CC58A; --ok-soft:#163224; --warn:#F0B74E; --warn-soft:#3A2C12; --warn-line:#8A6A2A;
+    --err:#FF8A80; --err-soft:#2E1A19; --err-chip:#4A2220;
+    --disabled-bg:#2A2C2F; --disabled-ink:#8A8D91;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141516; --surface:#1D1F21; --surface-2:#26282B; --ink:#ECECE8; --muted:#A8ABAF; --faint:#7D8084;
+  --line:#34373B; --dash:#55595E;
+  --accent:#7FA2FF; --accent-ink:#0E1A3A; --accent-soft:#1E2A4A; --accent-hover:#A6BFFF;
+  --ok:#5CC58A; --ok-soft:#163224; --warn:#F0B74E; --warn-soft:#3A2C12; --warn-line:#8A6A2A;
+  --err:#FF8A80; --err-soft:#2E1A19; --err-chip:#4A2220;
+  --disabled-bg:#2A2C2F; --disabled-ink:#8A8D91;
+  color-scheme: dark;
+}
+:root{ box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+html{ scroll-padding-top:env(safe-area-inset-top,0px); }
+*,*::before,*::after{ box-sizing:inherit; }
+body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+button{ font-family:inherit; }
+.mono{ font-family:var(--mono); }
+.num{ font-variant-numeric:tabular-nums; }
+.wrap{ max-width:1100px; margin:0 auto; padding:64px 20px 72px; display:flex; flex-direction:column; gap:32px; }
+.eyebrow{ font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
+h1{ margin:0; font-size:32px; font-weight:700; letter-spacing:-.01em; line-height:1.2; }
+.lede{ margin:0; font-size:16px; color:var(--muted); }
+.head{ display:flex; flex-direction:column; gap:8px; }
+
+.zones{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+@media (max-width:980px){ .zones{ grid-template-columns:repeat(2,minmax(0,1fr)); } .zones > .group-step{ grid-column:1 / -1; } }
+@media (max-width:640px){ .zones{ grid-template-columns:minmax(0,1fr); } .wrap{ padding-top:40px; } h1{ font-size:28px; } }
+.cta, #results, .privacy, #fatal{ max-width:760px; width:100%; margin-left:auto; margin-right:auto; }
+.lede{ max-width:760px; }
+.slot{ display:flex; flex-direction:column; gap:12px; min-width:0; }
+.slot-head{ display:flex; align-items:center; gap:10px; }
+.step{ width:26px; height:26px; border-radius:50%; background:var(--ink); color:var(--bg); font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.slot-head h2{ margin:0; font-size:18px; font-weight:600; }
+
+.zone{ min-height:220px; border-radius:12px; background:var(--surface); position:relative; transition:border-color .15s, background-color .15s, box-shadow .15s; }
+.zone.empty{ border:2px dashed var(--dash); }
+.zone.empty.drag, .zone.drag{ border:2px dashed var(--accent); background:var(--accent-soft); }
+.zone.loaded{ border:2px solid var(--ok); }
+.zone.loaded.warned{ border-color:var(--warn-line); }
+.zone.error{ border:2px solid var(--err); background:var(--err-soft); }
+.zone.reading{ border:2px solid var(--line); }
+.pick{ all:unset; box-sizing:border-box; width:100%; min-height:216px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:24px; text-align:center; cursor:pointer; border-radius:10px; color:var(--ink); }
+.pick:focus-visible, .btn:focus-visible, .link:focus-visible, .row-toggle:focus-visible, .chip-btn:focus-visible{ outline:3px solid var(--accent); outline-offset:3px; }
+.pick-icon{ width:52px; height:52px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; }
+.pick-main{ font-size:15px; font-weight:500; }
+.pick-main u{ color:var(--accent); }
+.pick-sub{ font-size:13px; color:var(--muted); }
+.card-in{ min-height:216px; padding:22px 24px; display:flex; flex-direction:column; justify-content:space-between; gap:16px; }
+.file-row{ display:flex; gap:14px; align-items:flex-start; }
+.badge{ width:40px; height:40px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.badge.ok{ background:var(--ok-soft); color:var(--ok); }
+.badge.err{ background:var(--err-chip); color:var(--err); }
+.badge.warn{ background:var(--warn-soft); color:var(--warn); }
+.badge.wait{ background:var(--surface-2); color:var(--muted); }
+.file-meta{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+.tag{ font-size:13px; font-weight:600; }
+.tag.ok{ color:var(--ok); } .tag.err{ color:var(--err); } .tag.warn{ color:var(--warn); } .tag.wait{ color:var(--muted); }
+.fname{ font-family:var(--mono); font-size:14px; word-break:break-all; }
+.msg{ font-size:14px; line-height:1.5; }
+.msg code, .note code, .reason code{ font-family:var(--mono); font-size:13px; }
+.stats-row{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.stats{ display:flex; gap:28px; }
+.stat{ display:flex; flex-direction:column; gap:2px; }
+.stat b{ font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; line-height:1.2; }
+.stat span{ font-size:13px; color:var(--muted); }
+.link{ background:none; border:none; padding:12px 0; color:var(--accent); font-size:14px; font-weight:500; text-decoration:underline; text-underline-offset:2px; cursor:pointer; border-radius:4px; }
+.link:hover{ color:var(--accent-hover); }
+.link.quiet{ color:var(--muted); font-weight:400; padding:12px; }
+.zone-note{ font-size:13px; color:var(--warn); display:flex; gap:6px; align-items:flex-start; }
+.spin{ width:20px; height:20px; border:2.5px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){ .spin{ animation-duration:2.4s; } .zone{ transition:none; } }
+
+.cta{ display:flex; flex-direction:column; align-items:center; gap:10px; }
+.btn{ height:52px; padding:0 32px; border:none; border-radius:10px; font-size:16px; font-weight:600; display:inline-flex; align-items:center; justify-content:center; gap:10px; cursor:pointer; }
+.btn.primary{ background:var(--accent); color:var(--accent-ink); }
+.btn.primary:hover:not(:disabled){ background:var(--accent-hover); }
+.btn:disabled{ background:var(--disabled-bg); color:var(--disabled-ink); cursor:not-allowed; }
+.btn.secondary{ height:44px; padding:0 18px; font-size:14px; background:var(--surface); color:var(--accent); border:1.5px solid var(--accent); }
+.btn.secondary:hover{ background:var(--accent-soft); }
+.helper{ margin:0; font-size:14px; color:var(--muted); text-align:center; }
+.helper .mono{ color:var(--ink); word-break:break-all; }
+
+.panel{ background:var(--surface); border:1px solid var(--line); border-radius:12px; }
+.panel-pad{ padding:22px 24px; display:flex; flex-direction:column; gap:16px; }
+.done{ padding:20px 24px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.done-l{ display:flex; gap:14px; align-items:center; min-width:0; }
+.done-title{ font-size:16px; font-weight:600; }
+.done-sub{ font-family:var(--mono); font-size:13px; color:var(--muted); word-break:break-all; }
+.panel.stop{ border-color:var(--err); background:var(--err-soft); }
+h3{ margin:0; font-size:15px; font-weight:600; }
+.flow{ display:grid; grid-template-columns:88px minmax(0,1fr); align-items:center; gap:8px 12px; }
+.flow-chips{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.flow-label{ font-size:14px; font-weight:600; }
+.flow + .flow{ margin-top:6px; }
+@media (max-width:640px){ .flow{ grid-template-columns:minmax(0,1fr); gap:8px; } }
+.chip{ display:inline-flex; align-items:baseline; gap:6px; padding:7px 12px; border-radius:8px; background:var(--surface-2); font-size:14px; }
+.chip b{ font-weight:600; font-variant-numeric:tabular-nums; }
+.chip span{ color:var(--muted); }
+.chip.ok b{ color:var(--ok); }
+.arrow{ color:var(--faint); display:flex; }
+.exc{ display:inline-flex; white-space:nowrap; align-items:center; gap:6px; font-size:14px; color:var(--muted); }
+.exc .ic-ok{ color:var(--ok); display:flex; }
+.chip-btn{ white-space:nowrap; display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:8px; border:1.5px solid var(--warn-line); background:var(--warn-soft); color:var(--warn); font-size:14px; font-weight:600; cursor:pointer; }
+.chip-btn.neutral{ border-color:var(--line); background:var(--surface-2); color:var(--muted); }
+.exc-group{ grid-column:2; display:flex; gap:8px 16px; flex-wrap:wrap; align-items:center; }
+@media (max-width:640px){ .exc-group{ grid-column:1; } }
+.chip-btn .num{ font-variant-numeric:tabular-nums; }
+.foot-note{ border-top:1px solid var(--line); padding-top:14px; font-size:14px; color:var(--muted); }
+.foot-note code{ font-family:var(--mono); font-size:13px; color:var(--ink); }
+.notes{ display:flex; flex-direction:column; gap:10px; }
+.note{ display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:10px; background:var(--warn-soft); color:var(--ink); font-size:14px; border:1px solid var(--warn-line); }
+.note .ic{ color:var(--warn); display:flex; margin-top:2px; }
+.list-wrap{ border:1px solid var(--line); border-radius:10px; overflow:auto; max-height:320px; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+th,td{ text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+th{ position:sticky; top:0; background:var(--surface-2); font-weight:600; white-space:nowrap; z-index:1; }
+td.mono{ white-space:nowrap; }
+.more{ padding:8px 12px; font-size:13px; color:var(--muted); }
+
+.row-toggle{ all:unset; box-sizing:border-box; width:100%; min-height:56px; padding:0 24px; display:flex; align-items:center; gap:10px; font-size:15px; cursor:pointer; }
+.row-toggle .s{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+@media (max-width:640px){ .row-toggle .s{ display:none; } }
+.row-toggle + .row-body{ border-top:1px solid var(--line); }
+.row-toggle .chev{ margin-left:auto; color:var(--muted); display:flex; transition:transform .15s; }
+.row-toggle[aria-expanded="true"] .chev{ transform:rotate(180deg); }
+.row-toggle .t{ font-weight:600; }
+.row-toggle .s{ color:var(--muted); }
+.ic-ok{ color:var(--ok); display:flex; } .ic-warn{ color:var(--warn); display:flex; }
+.divider{ border-top:1px solid var(--line); }
+.row-body{ padding:16px 24px 20px; }
+.colgrid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 28px; }
+@media (max-width:640px){ .colgrid{ grid-template-columns:minmax(0,1fr); } }
+.colgrid h4{ margin:0 0 8px; font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+.collist{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.collist li{ display:flex; gap:8px; align-items:center; font-family:var(--mono); font-size:13px; }
+.collist li.miss{ color:var(--warn); }
+.preview{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+.preview table{ width:max-content; min-width:100%; }
+.preview td{ max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.preview th{ font-family:var(--mono); font-weight:500; }
+.preview td.empty{ color:var(--faint); }
+.center{ display:flex; justify-content:center; }
+.privacy{ display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; color:var(--muted); text-align:center; }
+.fatal{ padding:14px 16px; border-radius:10px; background:var(--err-soft); border:1px solid var(--err); color:var(--ink); font-size:14px; }
+.sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+[hidden]{ display:none !important; }
+.gear{ position:fixed; top:calc(env(safe-area-inset-top,0px) + 14px); left:14px; z-index:30; height:44px; padding:0 14px 0 12px; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:600; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.06); }
+.gear:hover{ border-color:var(--accent); color:var(--accent); }
+.gear:focus-visible, .radio-card:focus-within, .drawer button:focus-visible, .drawer input:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+@media (max-width:640px){ .wrap{ padding-top:80px; } }
+.zone.group-ready{ border:2px solid var(--ok); }
+.zone.group-warn{ border:2px solid var(--warn-line); }
+.zone.group-none{ border:2px dashed var(--dash); }
+.badge.accent{ background:var(--accent-soft); color:var(--accent); }
+.gsel-wrap{ position:relative; }
+.gsel{ appearance:none; -webkit-appearance:none; width:100%; min-height:44px; padding:9px 38px 9px 12px; border:1px solid var(--line); border-radius:8px;
+  background:var(--bg); color:var(--ink); font:inherit; font-size:15px; font-weight:600; cursor:pointer; text-overflow:ellipsis; }
+.gsel:hover{ border-color:var(--accent); }
+.gsel:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+.gsel-wrap .chev{ position:absolute; right:12px; top:50%; transform:translateY(-50%); pointer-events:none; color:var(--muted); display:flex; }
+.info-line{ display:flex; gap:8px; align-items:flex-start; font-size:13px; color:var(--muted); padding:0 4px; }
+.info-line .ic{ color:var(--faint); display:flex; margin-top:1px; }
+.info-line code{ font-family:var(--mono); font-size:12.5px; color:var(--ink); }
+.saved .when{ font-variant-numeric:tabular-nums; }
+.backdrop{ position:fixed; inset:0; background:rgba(15,17,20,.38); z-index:40; }
+.drawer{ position:fixed; top:0; bottom:0; left:0; width:min(560px,100vw); background:var(--bg); z-index:41; display:flex; flex-direction:column; box-shadow:4px 0 24px rgba(0,0,0,.18); padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+.drawer-head{ padding:18px 20px 14px; border-bottom:1px solid var(--line); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.drawer-head h2{ margin:0; font-size:20px; }
+.saved{ font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-top:4px; }
+.saved.bad{ color:var(--warn); }
+.icon-btn{ width:44px; height:44px; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.icon-btn:hover{ border-color:var(--accent); color:var(--accent); }
+.icon-btn.sm{ width:34px; height:34px; border-radius:8px; }
+.icon-btn:disabled{ opacity:.35; cursor:default; }
+.drawer-body{ flex:1; overflow-y:auto; padding:16px 20px 24px; display:flex; flex-direction:column; gap:12px; }
+.drawer-foot{ padding:14px 20px; border-top:1px solid var(--line); display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.btn.ghost{ height:40px; padding:0 14px; font-size:14px; background:var(--surface); color:var(--ink); border:1px solid var(--line); }
+.btn.ghost:hover{ border-color:var(--accent); color:var(--accent); }
+.btn.small{ height:40px; padding:0 16px; font-size:14px; }
+.btn.danger{ height:40px; padding:0 14px; font-size:14px; background:var(--err); color:#fff; }
+.gcard{ border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.gcard-top{ display:flex; align-items:center; gap:6px; padding-right:10px; }
+.gcard-head{ all:unset; box-sizing:border-box; flex:1; min-width:0; min-height:56px; padding:10px 8px 10px 16px; display:flex; align-items:center; gap:10px; cursor:pointer; border-radius:12px; }
+.icon-btn.del:hover{ border-color:var(--err); color:var(--err); }
+.gcard-head:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+.gcard-head .nm{ font-weight:600; overflow-wrap:anywhere; }
+.gcard-head .ct{ color:var(--muted); font-size:13px; white-space:nowrap; }
+.gcard-head .chev{ margin-left:auto; color:var(--muted); display:flex; transition:transform .15s; }
+.gcard-head[aria-expanded="true"] .chev{ transform:rotate(180deg); }
+.gbody{ border-top:1px solid var(--line); padding:14px 16px 16px; display:flex; flex-direction:column; gap:14px; }
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field label{ font-size:13px; font-weight:600; color:var(--muted); }
+.field input[type=text], .field textarea, .search{ font:inherit; font-size:14px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); width:100%; min-height:44px; }
+.field textarea{ min-height:64px; resize:vertical; font-family:var(--mono); font-size:13px; }
+.err-text{ font-size:13px; color:var(--err); }
+.ok-text{ font-size:13px; color:var(--ok); }
+.row-gap{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.vlist{ list-style:none; margin:0; padding:0; border:1px solid var(--line); border-radius:10px; max-height:360px; overflow-y:auto; }
+.vlist li{ display:flex; align-items:center; gap:8px; padding:6px 8px 6px 10px; border-bottom:1px solid var(--line); background:var(--surface); }
+.vlist li:last-child{ border-bottom:none; }
+.vlist li.dragging{ opacity:.5; } .vlist li.over{ box-shadow:inset 0 2px 0 var(--accent); }
+.vlist .ix{ width:26px; font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; text-align:right; flex-shrink:0; }
+.vlist .grip{ color:var(--faint); cursor:grab; display:flex; flex-shrink:0; }
+.vlist .vn{ font-family:var(--mono); font-size:13px; flex:1; min-width:0; overflow-wrap:anywhere; }
+.dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.dot.in{ background:var(--ok); } .dot.out{ background:var(--dash); }
+.clash{ font-size:12px; color:var(--warn); }
+.legend{ font-size:12px; color:var(--muted); display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+.legend span{ display:inline-flex; gap:6px; align-items:center; }
+.picker{ border:1px solid var(--line); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; background:var(--bg); }
+.picker-list{ max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+.picker-list label{ display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:13px; padding:5px 6px; border-radius:6px; cursor:pointer; }
+.picker-list label:hover{ background:var(--surface-2); }
+.confirm{ padding:12px 14px; border-radius:10px; border:1px solid var(--err); background:var(--err-soft); display:flex; flex-direction:column; gap:10px; font-size:14px; }
+.import-box{ padding:14px; border-radius:10px; border:1px solid var(--accent); background:var(--accent-soft); display:flex; flex-direction:column; gap:10px; font-size:14px; }
+.empty-vars{ padding:14px; border:1px dashed var(--dash); border-radius:10px; font-size:14px; color:var(--muted); text-align:center; }
+</style>
+</head>
+<body>
+<button type="button" class="gear" id="gear" aria-haspopup="dialog" aria-controls="settings" aria-expanded="false"><span>Settings</span></button>
+<main class="wrap">
+  <header class="head">
+    <div class="eyebrow">Custom Report</div>
+    <h1>Generate VB Report</h1>
+    <p class="lede">Upload both files, choose a variable group, and get one Excel file: every Report 52 row, with the group’s Stoic variables on answered calls.</p>
+  </header>
+
+  <div id="fatal" class="fatal" role="alert" hidden></div>
+
+  <section class="zones" aria-label="Upload files and choose a variable group">
+    <div class="slot">
+      <div class="slot-head"><span class="step" aria-hidden="true">1</span><h2 id="h-r52">Upload Report 52</h2></div>
+      <div class="zone empty" id="zone-r52" data-slot="r52"></div>
+      <input type="file" id="in-r52" accept=".xlsx,.xls,.csv,.zip" hidden>
+    </div>
+    <div class="slot">
+      <div class="slot-head"><span class="step" aria-hidden="true">2</span><h2 id="h-stoic">Upload Stoic Report</h2></div>
+      <div class="zone empty" id="zone-stoic" data-slot="stoic"></div>
+      <input type="file" id="in-stoic" accept=".xlsx,.xls,.csv,.zip" hidden>
+    </div>
+    <div class="slot group-step">
+      <div class="slot-head"><span class="step" aria-hidden="true">3</span><h2 id="h-group">Choose variable group</h2></div>
+      <div class="zone" id="group-zone"></div>
+    </div>
+  </section>
+
+  <section class="cta" aria-label="Merge">
+    <button type="button" class="btn primary" id="go" disabled></button>
+    <p class="helper" id="helper"></p>
+  </section>
+
+  <section id="results" aria-label="Results" hidden style="display:flex; flex-direction:column; gap:20px"></section>
+
+  <p class="privacy"><span aria-hidden="true" style="display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></span><span>Files are processed in your browser. Nothing is uploaded.</span></p>
+  <div id="live" class="sr" aria-live="polite"></div>
+</main>
+<div class="backdrop" id="backdrop" hidden></div>
+<aside class="drawer" id="settings" role="dialog" aria-modal="true" aria-labelledby="set-title" hidden>
+  <div class="drawer-head">
+    <div><h2 id="set-title">Settings</h2><div class="saved" id="saved"></div></div>
+    <button type="button" class="icon-btn" id="close-set" aria-label="Close settings"></button>
+  </div>
+  <div class="drawer-body" id="set-body"></div>
+  <div class="drawer-foot">
+    <button type="button" class="btn primary small" id="new-group"><span>New group</span></button>
+    <span style="flex:1"></span>
+    <button type="button" class="btn ghost" id="export-set">Export</button>
+    <button type="button" class="btn ghost" id="import-set">Import</button>
+    <input type="file" id="in-import" accept=".json,application/json" hidden>
+  </div>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* Generate VB Report v2 — merge engine (Stoic variables come from a user-defined group). Pure functions; needs SheetJS (XLSX) only for parsing. */
+(function (root) {
+  'use strict';
+
+  var R52_COLUMNS = ['Id', 'Client Loan Id', 'Customer Id', 'Case Ref Number', 'Applicant Name', 'Mobile Number',
+    'Template Id', 'Template Name', 'Provider Name', 'Language', 'Communication Trail Created At', 'Action Type',
+    'Emi Amount', 'Total Due', 'Total Fees Due', 'Created At', 'Sent Status', 'Sent At', 'Call Duration Seconds',
+    'Did Number', 'Call Unanswered At', 'Call Answered At', 'Journey Ref Number', 'Error Description',
+    'Disposition Name', 'Followup Datetime', 'Transcript', 'Nach Interest', 'Nach Intent Notes'];
+
+  var DEFAULT_GROUP_VARS = ['app_downloaded', 'consent_to_proceed', 'customer_care_contacted', 'disposition',
+    'documentation_duration', 'documentation_duration_raw', 'documentation_mode', 'documentation_mode_raw',
+    'final_overall_rating_score', 'future_loan_consideration', 'future_loan_consideration_raw', 'identity_confirmed',
+    'loan_details_confirmed', 'q10_telecalling_csat', 'q10_telecalling_score',
+    'q13_recommendation_score', 'q2_products_eligibility_csat', 'q2_products_eligibility_score',
+    'q3_docs_processing_csat', 'q3_docs_processing_score', 'q4_terms_explained_csat', 'q4_terms_explained_score',
+    'q5_comfort_csat', 'q5_comfort_score', 'q6_staff_polite_csat', 'q6_staff_polite_score', 'q7_easy_contact_csat',
+    'q7_easy_contact_score', 'q8_issue_resolution_csat', 'q8_issue_resolution_score', 'q9_care_ease_csat',
+    'q9_care_ease_score', 'reason', 'referral_confirmed', 'referral_given', 'referral_name', 'referral_number',
+    'source_of_awareness', 'source_of_awareness_raw', 'suggestions',
+    'resume_from_node', 'last_completed_node'];   // one copy each, at the end: the call's post-call result
+
+  // Two extra columns at the end: the values PASSED INTO the Stoic call (its input variables sit before
+  // "Call Status"; the post-call results come after). Blank when an export has no input copy.
+
+  var KINDS = {
+    r52: { label: 'Report 52', identity: ['Action Type', 'Client Loan Id', 'Mobile Number'],
+      loan: 'Client Loan Id', mobile: 'Mobile Number', time: 'Call Answered At', tzMinutes: 330 },
+    stoic: { label: 'Stoic Report', identity: ['client_loan_id', 'To Number'],
+      loan: 'client_loan_id', mobile: 'To Number', time: 'Call Attempt Time', tzMinutes: 0 }
+  };
+
+  var HEADER_SCAN_ROWS = 25;
+  var TIME_GAP_WARN_MS = 30 * 60 * 1000;
+
+  // Header names: trim, collapse inner whitespace, case-insensitive. Underscores are NOT
+  // folded into spaces, so Report 52's "Client Loan Id" never collides with Stoic's "client_loan_id".
+  function normHeader(h) {
+    return String(h == null ? '' : h).replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function pad(n, w) { n = String(n); while (n.length < (w || 2)) n = '0' + n; return n; }
+
+  function formatDate(d) {
+    if (isNaN(d.getTime())) return '';
+    var s = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    var hasTime = d.getHours() || d.getMinutes() || d.getSeconds() || d.getMilliseconds();
+    if (hasTime) s += ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    return s;
+  }
+
+  // Cell value -> output text. Keeps text exactly as stored ("NA", "N/A", "0" stay as they are).
+  function cellText(v) {
+    if (v === null || v === undefined) return '';
+    if (v.__cell) return v.kind === 'date' ? v.text : cellText(v.v);
+    if (v instanceof Date) return formatDate(v);
+    if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+    if (typeof v === 'number') {
+      if (!isFinite(v)) return '';
+      if (Number.isInteger(v)) return v.toLocaleString('fullwide', { useGrouping: false });
+      return String(v);
+    }
+    return String(v);
+  }
+
+  function isBlankRow(row) {
+    for (var i = 0; i < row.length; i++) if (cellText(row[i]).trim() !== '') return false;
+    return true;
+  }
+
+  // ---------- parsing ----------
+  function parseFile(XLSX, bytes, fileName) {
+    var isCsv = /\.(csv|txt)$/i.test(fileName || '');
+    var wb;
+    if (isCsv) {
+      var text = new TextDecoder('utf-8').decode(bytes);
+      wb = XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true, cellDates: true });
+    } else {
+      wb = XLSX.read(bytes, { type: 'array', cellDates: false, cellNF: true, cellStyles: true });
+    }
+    var date1904 = !!(wb.Workbook && wb.Workbook.WBProps && wb.Workbook.WBProps.date1904);
+    var sheets = [];
+    for (var i = 0; i < wb.SheetNames.length; i++) {
+      var ws = wb.Sheets[wb.SheetNames[i]];
+      if (!ws) continue;
+      if (!isCsv) annotateCells(XLSX, ws, date1904);
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true });
+      sheets.push({ name: wb.SheetNames[i], rows: rows, cols: ws['!cols'] || [], source: isCsv ? 'csv' : 'xlsx' });
+    }
+    return sheets;
+  }
+
+  // Real Excel date cells -> "YYYY-MM-DD HH:MM:SS" text, computed in UTC arithmetic so the
+  // viewer's own timezone can never shift a value. Rounded to the nearest second.
+  function serialToText(serial, date1904) {
+    var days = serial + (date1904 ? 1462 : 0);
+    var secs = Math.round((days - 25569) * 86400);
+    var u = new Date(secs * 1000);
+    var s = u.getUTCFullYear() + '-' + pad(u.getUTCMonth() + 1) + '-' + pad(u.getUTCDate());
+    if (Math.abs(days - Math.round(days)) > 1e-9 || secs % 86400 !== 0)
+      s += ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes()) + ':' + pad(u.getUTCSeconds());
+    return s;
+  }
+  // Keep what makes an xlsx cell look the way it does: dates and formatted numbers are wrapped so the
+  // value (serial / number) and its number format survive to the output workbook, while cellText()
+  // still gives a timezone-proof text form for matching.
+  function annotateCells(XLSX, ws, date1904) {
+    for (var addr in ws) {
+      if (addr.charAt(0) === '!') continue;
+      var c = ws[addr];
+      if (!c) continue;
+      if (c.t === 'n' && typeof c.v === 'number') {
+        if (c.z && XLSX.SSF.is_date(c.z) && c.v > 0 && c.v < 2958466)
+          c.v = { __cell: 1, kind: 'date', v: c.v, z: c.z, text: serialToText(c.v, date1904) };
+        else if (c.z && c.z !== 'General')
+          c.v = { __cell: 1, kind: 'num', v: c.v, z: c.z };
+      } else if (c.t === 's' && c.z === '@') {
+        c.v = { __cell: 1, kind: 'str', v: c.v, z: '@' };
+      } else if (c.t === 'd' && c.v instanceof Date) {
+        c.v = formatDate(c.v); c.t = 's';
+      }
+    }
+  }
+
+  // Pull spreadsheet files out of a .zip (SheetJS's CFB reader handles ZIP containers).
+  function unzip(XLSX, bytes) {
+    var z = XLSX.CFB.read(bytes, { type: 'array' }), out = [];
+    for (var i = 0; i < z.FileIndex.length; i++) {
+      var f = z.FileIndex[i], full = z.FullPaths[i] || f.name;
+      if (!f || f.type !== 2 || !f.content || !f.content.length) continue;
+      if (f.name.charAt(0) === '\u0001' || /(^|\/)(__MACOSX|\.)/.test(full) || f.name.charAt(0) === '.') continue;
+      if (!/\.(xlsx|xlsm|xls|csv)$/i.test(f.name)) continue;
+      out.push({ name: f.name, bytes: f.content instanceof Uint8Array ? f.content : new Uint8Array(f.content) });
+    }
+    return out;
+  }
+
+  // preferLast: when a column name repeats, use its LAST occurrence. The Stoic export lists the call's
+  // input variables before the post-call results, so a repeated name (e.g. resume_from_node) is an input
+  // first and the call's result last; the output wants the result.
+  // Stoic layout: [call inputs] Call Status … Transcript … [summary, key_points, action_items,
+  // call_disconnect_reason, classification] [post-call results]. When a name repeats, ALWAYS use the call's
+  // result: the copy after the post-call anchor (else after Call Status, else the last one).
+  var STOIC_RESULT_ANCHORS = ['summary', 'key_points', 'action_items', 'call_disconnect_reason', 'classification'];
+  function headerIndex(headerRow, isStoic) {
+    var map = {}, dups = [], seen = {}, all = {};
+    for (var i = 0; i < headerRow.length; i++) {
+      var k = normHeader(headerRow[i]);
+      if (!k) continue;
+      (all[k] || (all[k] = [])).push(i);
+      if (Object.prototype.hasOwnProperty.call(map, k)) { if (!seen[k]) { dups.push(cellText(headerRow[i]).trim()); seen[k] = 1; } continue; }
+      map[k] = i;
+    }
+    if (isStoic && dups.length) {
+      var anchor = -1, cs = all[normHeader('Call Status')] ? all[normHeader('Call Status')][0] : -1;
+      STOIC_RESULT_ANCHORS.forEach(function (a) { var at = all[a]; if (at && at[0] > anchor) anchor = at[0]; });
+      Object.keys(seen).forEach(function (k) {
+        var pos = all[k], after = pos.filter(function (x) { return anchor >= 0 && x > anchor; });
+        if (!after.length) after = pos.filter(function (x) { return cs >= 0 && x > cs; });
+        map[k] = (after.length ? after : pos)[(after.length ? after : pos).length - 1];
+      });
+    }
+    return { map: map, dups: dups };
+  }
+
+  function missingOf(map, names) {
+    return names.filter(function (n) { return !Object.prototype.hasOwnProperty.call(map, normHeader(n)); });
+  }
+
+  // Find, across all sheets and the first rows of each, the best header row for a kind.
+  function locate(sheets, kind) {
+    var spec = KINDS[kind], best = null;
+    for (var s = 0; s < sheets.length; s++) {
+      var rows = sheets[s].rows, lim = Math.min(rows.length, HEADER_SCAN_ROWS);
+      for (var r = 0; r < lim; r++) {
+        if (!rows[r] || !rows[r].length || isBlankRow(rows[r])) continue;
+        var hi = headerIndex(rows[r], kind === 'stoic');
+        var miss = missingOf(hi.map, spec.identity);
+        var score = spec.identity.length - miss.length;
+        if (!best || score > best.score) best = { score: score, sheet: s, headerRow: r, hi: hi, missing: miss };
+        if (!miss.length) return best;
+      }
+    }
+    return best || { score: 0, sheet: -1, headerRow: -1, hi: { map: {}, dups: [] }, missing: spec.identity.slice() };
+  }
+
+  function makeTable(sheets, found, kind) {
+    var rows = sheets[found.sheet].rows, data = [], blanks = 0, pendingBlanks = 0;
+    for (var r = found.headerRow + 1; r < rows.length; r++) {
+      var row = rows[r] || [];
+      if (isBlankRow(row)) { pendingBlanks++; continue; }
+      if (data.length) blanks += pendingBlanks;        // only gaps BETWEEN records count; leading/trailing empties don't
+      pendingBlanks = 0;
+      data.push(row);
+    }
+    var others = [];
+    for (var o = 0; o < sheets.length; o++) {
+      if (o === found.sheet) continue;
+      var lim = Math.min(sheets[o].rows.length, HEADER_SCAN_ROWS);
+      for (var q = 0; q < lim; q++) {
+        var rr = sheets[o].rows[q];
+        if (rr && rr.length && !missingOf(headerIndex(rr).map, KINDS[kind].identity).length) { others.push(sheets[o].name); break; }
+      }
+    }
+    var hdr = sheets[found.sheet].rows[found.headerRow] || [];
+    var names = [], seen = {};
+    for (var q2 = 0; q2 < hdr.length; q2++) { var nm = cellText(hdr[q2]).replace(/^\uFEFF/, '').trim(), nk = normHeader(nm); if (nk && !seen[nk]) { seen[nk] = 1; names.push(nm); } }
+    return { kind: kind, sheetName: sheets[found.sheet].name, map: found.hi.map, dups: found.hi.dups, rows: data, headerNames: names,
+      cols: sheets[found.sheet].cols || [], source: sheets[found.sheet].source,
+      blankRowsSkipped: blanks, otherSheets: others };
+  }
+
+  // Identify what a parsed file is. Returns {kind:'r52'|'stoic'|null, table, missing:{r52:[],stoic:[]}}
+  function identify(sheets) {
+    var a = locate(sheets, 'r52'), b = locate(sheets, 'stoic');
+    var res = { kind: null, table: null, missing: { r52: a.missing, stoic: b.missing } };
+    var aOk = !a.missing.length, bOk = !b.missing.length;
+    if (aOk && !bOk) { res.kind = 'r52'; res.table = makeTable(sheets, a, 'r52'); }
+    else if (bOk && !aOk) { res.kind = 'stoic'; res.table = makeTable(sheets, b, 'stoic'); }
+    else if (aOk && bOk) { res.kind = 'ambiguous'; }
+    return res;
+  }
+
+  function get(table, row, name) {
+    var i = table.map[normHeader(name)];
+    return i === undefined ? undefined : row[i];
+  }
+
+  // ---------- keys & times ----------
+  function loanKey(v) { return cellText(v).replace(/\s+/g, '').toUpperCase(); }
+
+  function mobileKey(v) {
+    var s = cellText(v).trim();
+    if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, '');           // "9783414512.0"
+    if (/^\d+(\.\d+)?e\+?\d+$/i.test(s)) s = Number(s).toLocaleString('fullwide', { useGrouping: false }); // 9.78E+09
+    var d = s.replace(/\D/g, '');
+    return d.length > 10 ? d.slice(-10) : d;
+  }
+
+  // Epoch ms from a cell. Values without an explicit offset are read in tzMinutes (IST=330, UTC=0).
+  function parseTime(v, tzMinutes) {
+    if (v === null || v === undefined || v === '') return null;
+    if (v.__cell) v = v.kind === 'date' ? v.text : v.v;
+    var y, mo, d, h = 0, mi = 0, s = 0, ms = 0, off = tzMinutes;
+    if (v instanceof Date) {
+      if (isNaN(v.getTime())) return null;
+      y = v.getFullYear(); mo = v.getMonth() + 1; d = v.getDate();
+      h = v.getHours(); mi = v.getMinutes(); s = v.getSeconds(); ms = v.getMilliseconds();
+    } else if (typeof v === 'number') {
+      if (!(v > 1 && v < 2958466)) return null;                  // Excel serial range
+      var t = Math.round((v - 25569) * 86400000);
+      var u = new Date(t);
+      y = u.getUTCFullYear(); mo = u.getUTCMonth() + 1; d = u.getUTCDate();
+      h = u.getUTCHours(); mi = u.getUTCMinutes(); s = u.getUTCSeconds(); ms = u.getUTCMilliseconds();
+    } else {
+      var m = String(v).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i);
+      if (!m) return null;
+      y = +m[1]; mo = +m[2]; d = +m[3];
+      if (m[4] !== undefined) { h = +m[4]; mi = +m[5]; s = m[6] ? +m[6] : 0; ms = m[7] ? Math.round(+('0.' + m[7]) * 1000) : 0; }
+      if (m[8]) {
+        if (/z/i.test(m[8])) off = 0;
+        else { var sg = m[8][0] === '-' ? -1 : 1, z = m[8].replace(/[+\-:]/g, ''); off = sg * (+z.slice(0, 2) * 60 + +z.slice(2, 4)); }
+      }
+    }
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 60) return null;
+    return Date.UTC(y, mo - 1, d, h, mi, s, ms) - off * 60000;
+  }
+
+  function istDate(ms) {
+    var u = new Date(ms + 330 * 60000);
+    return u.getUTCFullYear() + '-' + pad(u.getUTCMonth() + 1) + '-' + pad(u.getUTCDate());
+  }
+
+  // ---------- merge ----------
+  // Group variables: trimmed, non-empty, de-duplicated (case/space-insensitive), order kept.
+  function cleanVars(list) {
+    var out = [], seen = {};
+    (list || []).forEach(function (v) {
+      var s = String(v == null ? '' : v).trim().replace(/^["'\u201C\u201D\u2018\u2019`]+|["'\u201C\u201D\u2018\u2019`]+$/g, '').trim(), k = normHeader(s);
+      if (!k || seen[k]) return; seen[k] = 1; out.push(s);
+    });
+    return out;
+  }
+  // Parse a pasted/typed list of variable names, keeping their order. Accepts names separated by commas
+  // (with or without spaces), tabs, new lines or semicolons; each name bare or wrapped in "double",
+  // 'single', “curly” or `back` quotes; optionally the whole list inside [ ]. A quoted name may contain
+  // commas or spaces ("Call Cost (INR)"). Duplicates are dropped, first occurrence wins.
+  var QUOTE_PAIRS = { '"': '"', "'": "'", '\u201C': '\u201D', '\u201D': '\u201D', '\u2018': '\u2019', '\u2019': '\u2019', '`': '`', '\u201E': '\u201C' };
+  function tokenizeVarList(text) {
+    var s = String(text == null ? '' : text).replace(/^\uFEFF/, '').trim(), out = [], i = 0, n;
+    if (s.charAt(0) === '[' && s.charAt(s.length - 1) === ']') s = s.slice(1, -1);
+    n = s.length;
+    var isSep = function (c) { return c === ',' || c === '\t' || c === '\n' || c === '\r' || c === ';'; };
+    while (i < n) {
+      while (i < n && (s[i] === ' ' || s[i] === '\u00A0')) i++;          // leading spaces
+      if (i >= n) break;
+      if (isSep(s[i])) { i++; continue; }
+      var close = QUOTE_PAIRS[s[i]], tok = '';
+      if (close) {
+        var j = s.indexOf(close, i + 1);
+        if (j < 0) j = n;                                                   // unclosed quote: take the rest of the field
+        tok = s.slice(i + 1, j);
+        i = j + 1;
+        while (i < n && !isSep(s[i])) i++;                                  // ignore anything up to the next separator
+      } else {
+        var st = i; while (i < n && !isSep(s[i])) i++;
+        tok = s.slice(st, i);
+      }
+      out.push(tok);
+    }
+    return out;
+  }
+  function splitVarList(text) { return cleanVars(tokenizeVarList(text)); }
+
+  function outputName(r52FileName) {
+    var base = String(r52FileName || '').split(/[\\/]/).pop().replace(/\.(xlsx|xlsm|xls|csv|zip)$/i, '');
+    return (base || 'Report_52') + '.xlsx';
+  }
+
+  function merge(r52, stoic, variables) {
+    var VARS = cleanVars(variables || DEFAULT_GROUP_VARS);
+    var S = KINDS.stoic, R = KINDS.r52;
+    var totalR52 = r52.rows.length, totalStoic = stoic.rows.length;
+
+    // Every Report 52 row is kept. Only ANSWERED rows take part in matching; ANSWERED rows repeating
+    // the same Id (the attempt key) are duplicates of one attempt and share its Stoic match.
+    var unansPool = [], unansById = {};
+    var all = [], answered = [], primaries = [], firstById = {}, typeCounts = {}, typeOrder = [], allKeys = {}, allLoans = {};
+    for (var i = 0; i < r52.rows.length; i++) {
+      var row = r52.rows[i];
+      var at = cellText(get(r52, row, 'Action Type')).trim().toUpperCase() || '(BLANK)';
+      if (!typeCounts[at]) { typeCounts[at] = 0; typeOrder.push(at); }
+      typeCounts[at]++;
+      var lk = loanKey(get(r52, row, R.loan)), mk = mobileKey(get(r52, row, R.mobile));
+      var key = lk && mk ? lk + '|' + mk : null;
+      if (lk) allLoans[lk] = true;
+      if (key) (allKeys[key] || (allKeys[key] = {}))[at] = true;
+      var rec = { i: i, row: row, loan: lk, mob: mk, key: key, type: at, match: null, reason: null, dupOf: null };
+      all.push(rec);
+      if (at === 'UNANSWERED') {
+        var uid = cellText(get(r52, row, 'Id')).trim().toLowerCase();
+        if (!(uid && unansById[uid])) {
+          if (uid) unansById[uid] = true;
+          rec.idx = 1e9 + i; rec.t = parseTime(get(r52, row, 'Call Unanswered At'), R.tzMinutes);
+          unansPool.push(rec);
+        }
+        continue;
+      }
+      if (at !== 'ANSWERED') continue;
+      rec.idx = answered.length;
+      rec.t = parseTime(get(r52, row, R.time), R.tzMinutes);
+      answered.push(rec);
+      var idk = cellText(get(r52, row, 'Id')).trim().toLowerCase();
+      if (idk && firstById[idk]) { rec.dupOf = firstById[idk]; continue; }
+      if (idk) firstById[idk] = rec;
+      primaries.push(rec);
+    }
+
+    var hasStatus = Object.prototype.hasOwnProperty.call(stoic.map, normHeader('Call Status'));
+    var sRows = stoic.rows.map(function (row, j) {
+      var lk = loanKey(get(stoic, row, S.loan)), mk = mobileKey(get(stoic, row, S.mobile));
+      var st = cellText(get(stoic, row, 'Call Status')).trim().toLowerCase();
+      return { idx: j, row: row, loan: lk, mob: mk, key: lk && mk ? lk + '|' + mk : null, status: st,
+        answered: hasStatus ? /^(completed|answered|success)$/.test(st) : true,
+        t: parseTime(get(stoic, row, S.time), S.tzMinutes), used: false, reason: null, expected: false };
+    });
+
+    var groups = {};
+    function grp(k) { return groups[k] || (groups[k] = { a: [], s: [] }); }
+    primaries.forEach(function (a) { if (a.key) grp(a.key).a.push(a); });
+    unansPool.forEach(function (u) { if (u.key && groups[u.key] && groups[u.key].a.length) groups[u.key].a.push(u); });
+    sRows.forEach(function (s) { if (s.key) grp(s.key).s.push(s); });
+
+    var bigGap = 0, untimed = 0, notCompleted = 0;
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k];
+      if (!g.a.length || !g.s.length) return;
+      if (g.a.length === 1 && g.s.length === 1 && g.a[0].type === 'ANSWERED') { pair(g.a[0], g.s[0]); return; }
+      var pairs = [];
+      g.a.forEach(function (a) {
+        g.s.forEach(function (s) {
+          var d = (a.t !== null && s.t !== null) ? Math.abs(a.t - s.t) : Infinity;
+          var agree = (a.type === 'ANSWERED') === !!s.answered;
+          pairs.push({ a: a, s: s, d: d, timed: d !== Infinity ? 0 : 1, bucket: d !== Infinity ? Math.round(d / 60000) : 0, agree: agree ? 0 : 1 });
+        });
+      });
+      pairs.sort(function (x, y) { return (x.timed - y.timed) || (x.bucket - y.bucket) || (x.agree - y.agree) ||
+        ((x.d === Infinity ? 0 : x.d) - (y.d === Infinity ? 0 : y.d)) || (x.a.idx - y.a.idx) || (x.s.idx - y.s.idx); });
+      pairs.forEach(function (p) { if (!p.a.match && !p.s.used) pair(p.a, p.s); });
+    });
+    function pair(a, s) {
+      a.match = s;
+      if (a.type !== 'ANSWERED') { s.claimedBy = a; return; }       // UNANSWERED row takes its own call; nothing is filled
+      s.used = true;
+      if (!s.answered) notCompleted++;
+      if (a.t === null || s.t === null) untimed++;
+      else if (Math.abs(a.t - s.t) > TIME_GAP_WARN_MS) bigGap++;
+    }
+
+    answered.forEach(function (a) { if (a.dupOf) a.match = a.dupOf.match; });
+    var dupAnswered = answered.filter(function (a) { return a.dupOf; }).length;
+
+    var stoicLoans = {};
+    sRows.forEach(function (s) { if (s.loan) stoicLoans[s.loan] = true; });
+
+    var unmatched = [], excluded = [];
+    answered.forEach(function (a) {
+      if (a.match) return;
+      if (a.dupOf) { a.reason = 'Duplicate of another ANSWERED row (same Id): ' + (a.dupOf.reason || 'no Stoic match'); unmatched.push(a); return; }
+      if (!a.key) a.reason = !a.loan ? 'Loan ID is blank' : 'Mobile number is blank';
+      else if (groups[a.key] && groups[a.key].s.length) a.reason = 'Extra answered call: more answered calls than Stoic calls for this loan + mobile';
+      else if (stoicLoans[a.loan]) a.reason = 'Loan ID found in Stoic, but mobile number differs';
+      else a.reason = 'Loan ID not in Stoic Report';
+      unmatched.push(a);
+    });
+    sRows.forEach(function (s) {
+      if (s.used) return;
+      if (s.claimedBy) {
+        s.expected = !s.answered;
+        s.reason = s.answered ? 'Report 52 marks this call UNANSWERED (Stoic says completed)' : 'Not answered: matches an UNANSWERED call in Report 52';
+        excluded.push(s); return;
+      }
+      if (!s.answered) { s.expected = true; s.reason = 'Not answered in Stoic (Call Status: ' + (s.status || 'blank') + ')'; excluded.push(s); return; }
+      if (!s.key) s.reason = !s.loan ? 'Loan ID is blank' : 'Mobile number is blank';
+      else if (groups[s.key] && groups[s.key].a.length) s.reason = 'Extra Stoic call for this loan + mobile';
+      else if (allKeys[s.key] && allKeys[s.key].UNANSWERED) s.reason = 'Report 52 marks this call UNANSWERED';
+      else if (allKeys[s.key] && allKeys[s.key].SENT && Object.keys(allKeys[s.key]).length === 1) s.reason = 'Report 52 has no outcome row yet for this loan (only SENT)';
+      else if (allKeys[s.key]) s.reason = 'Report 52 has this loan only as ' + Object.keys(allKeys[s.key]).join(', ');
+      else if (allLoans[s.loan]) s.reason = 'Loan ID found in Report 52, but mobile number differs';
+      else s.reason = 'Loan ID not in Report 52';
+      excluded.push(s);
+    });
+
+    var header = R52_COLUMNS.concat(VARS);
+    var rMissing = missingOf(r52.map, R52_COLUMNS), sMissing = missingOf(stoic.map, VARS);
+    var rIdx = R52_COLUMNS.map(function (n) { return r52.map[normHeader(n)]; });
+    var sIdx = VARS.map(function (n) { return stoic.map[normHeader(n)]; });
+    var raw = all.map(function (a) {
+      var line = rIdx.map(function (ix) { return ix === undefined ? null : a.row[ix]; });
+      var srow = a.match && a.type === 'ANSWERED' ? a.match.row : null;   // only ANSWERED rows carry Stoic data
+      return line.concat(sIdx.map(function (ix) { return srow && ix !== undefined ? srow[ix] : null; }));
+    });
+    var out = raw.map(function (r) { return r.map(cellText); });
+    var widths = rIdx.map(function (ix) { return ix === undefined ? null : r52.cols[ix] || null; })
+      .concat(sIdx.map(function (ix) { return ix === undefined ? null : stoic.cols[ix] || null; }));
+    var sources = R52_COLUMNS.map(function () { return 'r52:' + r52.source; }).concat(VARS.map(function () { return 'stoic:' + stoic.source; }));
+
+
+    return {
+      header: header, rows: out, raw: raw, widths: widths, sources: sources, sheetName: r52.sheetName || 'Sheet1',
+      fileName: outputName(r52.fileName),
+      counts: { r52Rows: totalR52, outRows: out.length, blankRowsSkipped: r52.blankRowsSkipped || 0,
+        types: typeOrder.map(function (t) { return [t, typeCounts[t]]; }), dupAnswered: dupAnswered,
+        answered: answered.length, matched: answered.length - unmatched.length,
+        unmatched: unmatched.length, stoicRows: totalStoic, used: sRows.filter(function (s) { return s.used; }).length,
+        excluded: excluded.length, notAnswered: excluded.filter(function (s) { return s.expected; }).length,
+        stoicAnswered: sRows.filter(function (s) { return s.answered; }).length, hasStatus: hasStatus,
+        bigGap: bigGap, untimed: untimed, notCompleted: notCompleted },
+      unmatched: unmatched.map(function (a) { return { loan: cellText(get(r52, a.row, R.loan)), mobile: cellText(get(r52, a.row, R.mobile)), name: cellText(get(r52, a.row, 'Applicant Name')), reason: a.reason }; }),
+      excluded: excluded.map(function (s) { return { loan: cellText(get(stoic, s.row, S.loan)), mobile: cellText(get(stoic, s.row, S.mobile)), name: cellText(get(stoic, s.row, 'customer_name')), reason: s.reason, expected: s.expected }; }),
+      columns: R52_COLUMNS.map(function (n) { return { name: n, source: 'Report 52', found: rMissing.indexOf(n) < 0 }; })
+        .concat(VARS.map(function (n) { return { name: n, source: 'Stoic', optional: true, found: sMissing.indexOf(n) < 0 }; })),
+      missing: { r52: rMissing, stoic: sMissing },
+      dupHeaders: { r52: r52.dups, stoic: stoic.dups },
+      otherSheets: { r52: r52.otherSheets || [], stoic: stoic.otherSheets || [] }
+    };
+  }
+
+  // ---------- XLSX ----------
+  // When a source is a CSV (no cell types): Report 52 keeps its single numeric column; for Stoic
+  // variables a plain number becomes a number, while ID-like values (leading 0 or +, 10+ digits) stay text.
+  var R52_NUMERIC_WHEN_CSV = { 'Call Duration Seconds': 1 };
+  var PLAIN_NUMBER = /^-?(0|[1-9]\d{0,8})(\.\d+)?$/;
+  var XLSX_CELL_MAX = 32767;
+
+  function toCell(v, fromCsv, numericCol) {   // numericCol: true = allow CSV text -> number
+    if (v === null || v === undefined || v === '') return null;
+    if (v.__cell) {
+      if (v.kind === 'str') return { t: 's', v: String(v.v), z: '@' };
+      return { t: 'n', v: v.v, z: v.z };
+    }
+    if (typeof v === 'number') return isFinite(v) ? { t: 'n', v: v } : null;
+    if (typeof v === 'boolean') return { t: 'b', v: v };
+    if (v instanceof Date) return { t: 's', v: formatDate(v) };
+    var s = String(v);
+    if (fromCsv && numericCol && PLAIN_NUMBER.test(s.trim())) return { t: 'n', v: Number(s.trim()) };
+    return { t: 's', v: s };
+  }
+
+  function toXlsx(XLSX, m) {
+    var ws = {}, truncated = [], H = m.header, rows = m.raw;
+    for (var c = 0; c < H.length; c++) ws[XLSX.utils.encode_cell({ r: 0, c: c })] = { t: 's', v: H[c] };
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      for (c = 0; c < H.length; c++) {
+        var src = m.sources[c], isStoic = src.indexOf('stoic:') === 0;
+        var cell = toCell(row[c], /:csv$/.test(src), isStoic ? true : R52_NUMERIC_WHEN_CSV[H[c]] === 1);
+        if (!cell) continue;
+        if (cell.t === 's' && cell.v.length > XLSX_CELL_MAX) { cell.v = cell.v.slice(0, XLSX_CELL_MAX); truncated.push({ row: r + 2, column: H[c] }); }
+        ws[XLSX.utils.encode_cell({ r: r + 1, c: c })] = cell;
+      }
+    }
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: H.length - 1 } });
+    var cols = m.widths.map(function (w) { return w && (w.wch || w.width) ? { wch: w.wch || w.width } : {}; });
+    if (cols.some(function (x) { return x.wch; })) ws['!cols'] = cols;
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, String(m.sheetName || 'Sheet1').slice(0, 31) || 'Sheet1');
+    var data = XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: true });
+    return { data: data, truncated: truncated };
+  }
+
+  // ---------- CSV ----------
+  function csvField(v) {
+    var s = v == null ? '' : String(v);
+    return /[",\r\n]|^\s|\s$/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function toCsv(header, rows) {
+    var lines = [header.map(csvField).join(',')];
+    for (var i = 0; i < rows.length; i++) lines.push(rows[i].map(csvField).join(','));
+    return '\uFEFF' + lines.join('\r\n') + '\r\n';
+  }
+
+  function countAnswered(table) {
+    var n = 0;
+    for (var i = 0; i < table.rows.length; i++)
+      if (cellText(get(table, table.rows[i], 'Action Type')).trim().toUpperCase() === 'ANSWERED') n++;
+    return n;
+  }
+
+  root.WCR = { DEFAULT_GROUP_VARS: DEFAULT_GROUP_VARS, cleanVars: cleanVars, splitVarList: splitVarList, tokenizeVarList: tokenizeVarList, toXlsx: toXlsx, unzip: unzip, outputName: outputName, R52_COLUMNS: R52_COLUMNS, STOIC_COLUMNS: DEFAULT_GROUP_VARS, KINDS: KINDS, parseFile: parseFile,
+    identify: identify, merge: merge, toCsv: toCsv, countAnswered: countAnswered, cellText: cellText,
+    mobileKey: mobileKey, loanKey: loanKey, parseTime: parseTime, normHeader: normHeader };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Generate VB Report v2 — settings store (variable groups).
+   Changes apply instantly on screen and are auto-saved to this browser (localStorage) every 5 seconds,
+   plus right away when the tab is hidden or closed so nothing is lost. Other tabs pick up each save;
+   in claude.ai each save also syncs to the viewer's own private storage there. Newest change wins. */
+(function (root) {
+  'use strict';
+  var KEY = 'generate-vb-report:v2:settings';
+  var SCHEMA = 1;
+  var AUTOSAVE_MS = 5000;
+  var listeners = [], state = null, localOk = true, dirty = false, savedAt = null, remote = { status: 'off', ref: null, pushing: null, again: false };
+
+  function now() { return Date.now(); }
+  function uid() { return 'g' + now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function norm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+  function key(s) { return norm(s).toLowerCase(); }
+
+  function seed() {
+    return { schema: SCHEMA, updatedAt: 0, selectedId: 'welcome-call', recent: ['welcome-call'],
+      groups: [{ id: 'welcome-call', name: 'Welcome Call', vars: root.WCR.DEFAULT_GROUP_VARS.slice() }] };
+  }
+
+  // Accept only well-formed data; repair what can be repaired, drop the rest.
+  function sanitize(obj) {
+    if (!obj || typeof obj !== 'object' || !Array.isArray(obj.groups)) return null;
+    var groups = [], ids = {}, names = {};
+    obj.groups.forEach(function (g) {
+      if (!g || typeof g !== 'object') return;
+      var name = norm(g.name);
+      if (!name) return;
+      var base = name, n = 2;
+      while (names[key(name)]) name = base + ' (' + (n++) + ')';
+      var id = typeof g.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(g.id) && !ids[g.id] ? g.id : uid();
+      ids[id] = 1; names[key(name)] = 1;
+      groups.push({ id: id, name: name, vars: root.WCR.cleanVars(Array.isArray(g.vars) ? g.vars.map(String) : []) });
+    });
+    var recent = (Array.isArray(obj.recent) ? obj.recent : []).filter(function (x, i, a) { return typeof x === 'string' && ids[x] && a.indexOf(x) === i; }).slice(0, 20);
+    var sel = typeof obj.selectedId === 'string' && ids[obj.selectedId] ? obj.selectedId : (recent[0] || (groups[0] && groups[0].id) || null);
+    return { schema: SCHEMA, updatedAt: +obj.updatedAt || 0, selectedId: sel, recent: recent, groups: groups };
+  }
+
+  function readLocal() {
+    try { var raw = root.localStorage.getItem(KEY); return raw ? sanitize(JSON.parse(raw)) : null; }
+    catch (e) { localOk = false; return null; }
+  }
+  function writeLocal() {
+    try { root.localStorage.setItem(KEY, JSON.stringify(state)); localOk = true; savedAt = new Date(); }
+    catch (e) { localOk = false; }
+  }
+  // Autosave: write pending changes (to this browser, then the claude.ai copy).
+  function flush() {
+    if (!dirty) return;
+    dirty = false; writeLocal(); push(); emit('status');
+  }
+  function emit(src) { listeners.forEach(function (fn) { try { fn(src); } catch (e) {} }); }
+
+  function commit(mutator) {
+    var next = JSON.parse(JSON.stringify(state));
+    var result = mutator(next);
+    if (result && result.error) return result;
+    next.updatedAt = Math.max(now(), state.updatedAt + 1);
+    state = next; dirty = true; emit('local');                          // saved by the next 5-second autosave
+    return result || {};
+  }
+
+  // ---------- claude.ai sync (private per-viewer document) ----------
+  function push() {
+    if (!remote.ref) return;
+    if (remote.pushing) { remote.again = true; return; }       // one write at a time to the document
+    remote.pushing = remote.ref.set(JSON.parse(JSON.stringify(state))).then(function () {
+      remote.status = 'synced'; emit('status');
+    }, function (err) {
+      remote.status = (err && (err.code === 'revoked' || err.code === 'not_granted')) ? 'off' : 'error'; emit('status');
+    }).then(function () { remote.pushing = null; if (remote.again) { remote.again = false; push(); } });
+  }
+  function startRemote() {
+    var c = root.claude;
+    if (!c || typeof c.use !== 'function') return;
+    Promise.all([c.use('db'), c.use('user')]).then(function (ns) {
+      var db = ns[0], user = ns[1];
+      if (!db || !user) return;
+      return user.id().then(function (id) {
+        if (!id) return;
+        remote.ref = db.doc('data/users/' + id + '/vb-report-settings');
+        remote.status = 'connecting'; emit('status');
+        remote.ref.onSnapshot(function (snap) {
+          var incoming = snap.exists ? sanitize(snap.data()) : null;
+          if (incoming && incoming.updatedAt > state.updatedAt) {           // newer on another device/tab
+            state = incoming; dirty = false; writeLocal(); remote.status = 'synced'; emit('remote');
+          } else if (!incoming || incoming.updatedAt < state.updatedAt) {
+            push();
+          } else { remote.status = 'synced'; emit('status'); }
+        }, function () { remote.status = 'error'; emit('status'); });
+      });
+    }).catch(function () {});
+  }
+
+  // ---------- public API ----------
+  var VBS = {
+    init: function () {
+      state = readLocal() || seed();
+      if (!localOk) emit('status');
+      writeLocal();
+      root.addEventListener('storage', function (e) {                   // another tab changed settings
+        if (e.key !== KEY || !e.newValue) return;
+        try { var s = sanitize(JSON.parse(e.newValue)); if (s && s.updatedAt > state.updatedAt) { state = s; dirty = false; emit('tab'); } } catch (x) {}
+      });
+      setInterval(flush, AUTOSAVE_MS);
+      root.addEventListener('pagehide', flush);                          // closing / navigating away
+      root.addEventListener('beforeunload', flush);
+      if (root.document) root.document.addEventListener('visibilitychange', function () { if (root.document.visibilityState === 'hidden') flush(); });
+      startRemote();
+      return VBS;
+    },
+    onChange: function (fn) { listeners.push(fn); },
+    groups: function () { return state.groups; },
+    group: function (id) { for (var i = 0; i < state.groups.length; i++) if (state.groups[i].id === id) return state.groups[i]; return null; },
+    selected: function () { return VBS.group(state.selectedId); },
+    status: function () { return { local: localOk, remote: remote.status, dirty: dirty, savedAt: savedAt, every: AUTOSAVE_MS / 1000 }; },
+    flush: flush,
+    nameError: function (name, exceptId) {
+      var n = norm(name);
+      if (!n) return 'Give the group a name.';
+      if (n.length > 80) return 'Keep the name under 80 characters.';
+      for (var i = 0; i < state.groups.length; i++) if (state.groups[i].id !== exceptId && key(state.groups[i].name) === key(n)) return 'Another group already has this name.';
+      return null;
+    },
+    select: function (id) {
+      if (state.selectedId === id || !VBS.group(id)) return;
+      commit(function (s) { s.selectedId = id; s.recent = [id].concat((s.recent || []).filter(function (x) { return x !== id; })).slice(0, 20); });
+    },
+    markUsed: function (id) {
+      if (!VBS.group(id) || (state.recent && state.recent[0] === id && state.selectedId === id)) return;
+      commit(function (s) { s.selectedId = id; s.recent = [id].concat((s.recent || []).filter(function (x) { return x !== id; })).slice(0, 20); });
+    },
+    create: function (name, vars) {
+      var n = (norm(name) || 'New group').slice(0, 70), base = n, k = 2;
+      while (VBS.nameError(n) && k < 10000) n = base + ' (' + (k++) + ')';
+      var id = uid();
+      commit(function (s) { s.groups.push({ id: id, name: n, vars: root.WCR.cleanVars(vars || []) }); if (!s.selectedId) { s.selectedId = id; s.recent = [id].concat(s.recent || []); } });
+      return id;
+    },
+    rename: function (id, name) {
+      var err = VBS.nameError(name, id); if (err) return { error: err };
+      return commit(function (s) { s.groups.forEach(function (g) { if (g.id === id) g.name = norm(name); }); });
+    },
+    setVars: function (id, vars) { return commit(function (s) { s.groups.forEach(function (g) { if (g.id === id) g.vars = root.WCR.cleanVars(vars); }); }); },
+    duplicate: function (id) { var g = VBS.group(id); return g ? VBS.create(g.name + ' copy', g.vars) : null; },
+    remove: function (id) {
+      return commit(function (s) {
+        s.groups = s.groups.filter(function (g) { return g.id !== id; });
+        s.recent = (s.recent || []).filter(function (x) { return x !== id; });
+        if (s.selectedId === id) s.selectedId = s.recent[0] || (s.groups[0] && s.groups[0].id) || null;   // fall back to the last used group
+      });
+    },
+    exportData: function () { return { app: 'generate-vb-report', schema: SCHEMA, exportedAt: new Date().toISOString(), groups: state.groups.map(function (g) { return { name: g.name, vars: g.vars.slice() }; }) }; },
+    // Returns {groups:[...]} ready to import, or {error}.
+    parseImport: function (text) {
+      var obj;
+      try { obj = JSON.parse(text); } catch (e) { return { error: 'This file isn’t valid JSON.' }; }
+      if (!obj || obj.app !== 'generate-vb-report' || !Array.isArray(obj.groups)) return { error: 'This isn’t a Generate VB Report settings file.' };
+      var clean = sanitize({ groups: obj.groups });
+      if (!clean || !clean.groups.length) return { error: 'The file has no usable groups.' };
+      return { groups: clean.groups };
+    },
+    importGroups: function (groups, mode) {
+      return commit(function (s) {
+        if (mode === 'replace') { s.groups = []; s.selectedId = null; s.recent = []; }
+        groups.forEach(function (g) {
+          var n = g.name, base = n, k = 2;
+          while (s.groups.some(function (x) { return key(x.name) === key(n); })) n = base + ' (' + (k++) + ')';
+          s.groups.push({ id: uid(), name: n, vars: root.WCR.cleanVars(g.vars) });
+        });
+        if (!s.selectedId && s.groups.length) { s.selectedId = s.groups[0].id; s.recent = [s.selectedId]; }
+      });
+    },
+    _key: KEY
+  };
+  root.VBS = VBS;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function(){
+'use strict';
+var ICON = {
+  up:'<path d="M12 15V3"></path><path d="M7 8l5-5 5 5"></path><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>',
+  check:'<path d="M5 12l5 5 9-10"></path>',
+  alert:'<circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path>',
+  warn:'<path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4"></path><path d="M12 17h.01"></path>',
+  dl:'<path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M4 19h16"></path>',
+  arrow:'<path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path>',
+  chev:'<path d="M6 9l6 6 6-6"></path>',
+  file:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path>'
+};
+function svg(name, size){ size = size || 20; return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+ICON[name]+'</svg>'; }
+function el(tag, attrs, kids){
+  var e = document.createElement(tag);
+  if (attrs) for (var k in attrs) {
+    if (attrs[k] === null || attrs[k] === undefined) continue;
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'text') e.textContent = attrs[k];
+    else if (k === 'html') e.innerHTML = attrs[k];          // only ever our own static icon markup
+    else if (k.slice(0,2) === 'on') e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
+  (kids || []).forEach(function(c){ if (c != null) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+  return e;
+}
+function icon(name, cls, size){ return el('span', { class: cls || '', html: svg(name, size), 'aria-hidden': 'true' }); }
+function fmt(n){ return Number(n).toLocaleString('en-IN'); }
+function code(t){ return el('code', { text: t }); }
+function announce(t){ var l = document.getElementById('live'); l.textContent = ''; setTimeout(function(){ l.textContent = t; }, 30); }
+
+var LABEL = { r52: 'Report 52', stoic: 'Stoic Report' };
+var OTHER_SIDE = { r52: 'right', stoic: 'left' };
+var SUB = { r52: 'Communication trail export · .xlsx, .csv or .zip', stoic: 'Call history export · .xlsx, .csv or .zip' };
+var state = { r52: { status: 'empty' }, stoic: { status: 'empty' }, merged: null, result: null };
+var tokens = { r52: 0, stoic: 0 };
+
+
+var libOk = typeof window.XLSX !== 'undefined' && window.XLSX && typeof window.XLSX.read === 'function';
+if (!libOk) {
+  var f = document.getElementById('fatal');
+  f.textContent = 'The spreadsheet reader could not load, so files can’t be read. Check your internet connection and reload the page.';
+  f.hidden = false;
+}
+
+// ---------- zones ----------
+function renderZone(slot){
+  var z = document.getElementById('zone-' + slot), s = state[slot];
+  z.className = 'zone ' + s.status + (s.status === 'loaded' && s.note ? ' warned' : '');
+  z.innerHTML = '';
+  if (s.status === 'empty') {
+    z.appendChild(el('button', { type: 'button', class: 'pick', 'aria-describedby': 'h-' + slot, onclick: function(){ openPicker(slot); } }, [
+      el('span', { class: 'pick-icon', html: svg('up', 22) }),
+      el('span', { class: 'pick-main' }, ['Drop file here or ', el('u', { text: 'browse' })]),
+      el('span', { class: 'pick-sub', text: SUB[slot] })
+    ]));
+    return;
+  }
+  var inner = el('div', { class: 'card-in' });
+  if (s.status === 'reading') {
+    inner.appendChild(el('div', { class: 'file-row' }, [
+      el('span', { class: 'badge wait' }, [el('span', { class: 'spin', 'aria-hidden': 'true' })]),
+      el('div', { class: 'file-meta' }, [ el('span', { class: 'tag wait', text: 'Reading file…' }), el('span', { class: 'fname', text: s.fileName }),
+        el('span', { class: 'msg', style: 'color:var(--muted)', text: 'Large files can take a few seconds.' }) ])
+    ]));
+  } else if (s.status === 'error') {
+    inner.appendChild(el('div', { class: 'file-row' }, [
+      el('span', { class: 'badge err', html: svg('alert', 20) }),
+      el('div', { class: 'file-meta' }, [ el('span', { class: 'tag err', text: s.title }), el('span', { class: 'fname', text: s.fileName || '' }), el('span', { class: 'msg' }, s.msg) ])
+    ]));
+    inner.appendChild(el('div', { style: 'display:flex; justify-content:flex-end' }, [ el('button', { type: 'button', class: 'link', onclick: function(){ openPicker(slot); } , text: 'Choose another file' }) ]));
+  } else if (s.status === 'loaded') {
+    inner.appendChild(el('div', { class: 'file-row' }, [
+      el('span', { class: 'badge ' + (s.note ? 'warn' : 'ok'), html: svg(s.note ? 'warn' : 'check', 20) }),
+      el('div', { class: 'file-meta' }, [
+        el('span', { class: 'tag ' + (s.note ? 'warn' : 'ok'), text: LABEL[slot] + ' recognised' }),
+        el('span', { class: 'fname', text: s.fileName }),
+        s.sheetNote ? el('span', { class: 'msg', style: 'color:var(--muted); font-size:13px', text: s.sheetNote }) : null
+      ])
+    ]));
+    if (s.note) inner.appendChild(el('div', { class: 'zone-note' }, [ icon('warn', '', 16), el('span', { text: s.note }) ]));
+    inner.appendChild(el('div', { class: 'stats-row' }, [
+      el('div', { class: 'stats' }, s.stats.map(function(p){ return el('div', { class: 'stat' }, [ el('b', { text: fmt(p[0]) }), el('span', { text: p[1] }) ]); })),
+      el('button', { type: 'button', class: 'link', 'aria-label': 'Replace ' + LABEL[slot] + ' file', onclick: function(){ openPicker(slot); }, text: 'Replace file' })
+    ]));
+  }
+  z.appendChild(inner);
+}
+
+function openPicker(slot){ var i = document.getElementById('in-' + slot); i.value = ''; i.click(); }
+
+['r52','stoic'].forEach(function(slot){
+  var z = document.getElementById('zone-' + slot), input = document.getElementById('in-' + slot), depth = 0;
+  input.addEventListener('change', function(){ if (input.files && input.files[0]) handleFile(slot, input.files[0], input.files.length); input.value = ''; });
+  z.addEventListener('dragenter', function(e){ if (!hasFiles(e)) return; e.preventDefault(); depth++; z.classList.add('drag'); });
+  z.addEventListener('dragover', function(e){ if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  z.addEventListener('dragleave', function(){ depth = Math.max(0, depth - 1); if (!depth) z.classList.remove('drag'); });
+  z.addEventListener('drop', function(e){ e.preventDefault(); depth = 0; z.classList.remove('drag');
+    var fl = e.dataTransfer && e.dataTransfer.files; if (fl && fl.length) handleFile(slot, fl[0], fl.length); });
+});
+function hasFiles(e){ var t = e.dataTransfer && e.dataTransfer.types; if (!t) return false; for (var i = 0; i < t.length; i++) if (t[i] === 'Files') return true; return false; }
+// A file dropped anywhere else must never navigate the page away.
+window.addEventListener('dragover', function(e){ if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('drop', function(e){ if (hasFiles(e)) e.preventDefault(); });
+
+function setSlot(slot, s){ state[slot] = s; state.merged = null; state.result = null; renderZone(slot); renderResults(); refresh(); if (window.VBS && VBS.groups) { renderGroups(); if (ui.open) renderDrawer(); } }
+
+function handleFile(slot, file, count){
+  var my = ++tokens[slot];
+  var name = file.name || 'file';
+  var multi = count > 1 ? 'You dropped ' + count + ' files; only the first was used.' : null;
+  if (!/\.(xlsx|xlsm|xls|csv|zip)$/i.test(name)) return setSlot(slot, { status: 'error', fileName: name, title: 'Not a spreadsheet', msg: ['Upload the ' + LABEL[slot] + ' export as .xlsx, .xls, .csv, or a .zip containing one.'] });
+  if (!file.size) return setSlot(slot, { status: 'error', fileName: name, title: 'Empty file', msg: ['This file has no content. Export it again and retry.'] });
+  if (!libOk) return setSlot(slot, { status: 'error', fileName: name, title: 'Reader unavailable', msg: ['The spreadsheet reader didn’t load. Reload the page and try again.'] });
+  setSlot(slot, { status: 'reading', fileName: name });
+  announce('Reading ' + name);
+  file.arrayBuffer().then(function(buf){
+    return new Promise(function(res){ setTimeout(function(){ res(buf); }, 40); });   // let "Reading…" paint first
+  }).then(function(buf){
+    if (my !== tokens[slot]) return;
+    var sheets, inner = null, id, other = slot === 'r52' ? 'stoic' : 'r52';
+    var isZip = /\.zip$/i.test(name);
+    if (isZip) {
+      var entries;
+      try { entries = WCR.unzip(XLSX, new Uint8Array(buf)); }
+      catch (err) { return setSlot(slot, { status: 'error', fileName: name, title: 'Couldn’t open this zip', msg: ['It may be damaged or password-protected. Unzip it and upload the file inside.'] }); }
+      if (!entries.length) return setSlot(slot, { status: 'error', fileName: name, title: 'No spreadsheet in this zip', msg: ['The zip has no .xlsx, .xls or .csv file inside.'] });
+      var mine = [], theirs = [], firstMiss = null;
+      entries.forEach(function(en){
+        try { var sh = WCR.parseFile(XLSX, en.bytes, en.name), d = WCR.identify(sh);
+          if (d.kind === slot) mine.push({ en: en, sh: sh, id: d }); else if (d.kind === other) theirs.push(en.name); else if (!firstMiss) firstMiss = d; }
+        catch (e) {}
+      });
+      if (my !== tokens[slot]) return;
+      if (mine.length > 1) return setSlot(slot, { status: 'error', fileName: name, title: 'More than one ' + LABEL[slot] + ' in this zip',
+        msg: ['Found ' + mine.length + ': ' + mine.map(function(x){ return x.en.name; }).join(', ') + '. Unzip it and upload one file.'] });
+      if (!mine.length && theirs.length) return setSlot(slot, { status: 'error', fileName: name, title: 'Wrong file for this slot',
+        msg: ['This zip holds a ' + LABEL[other] + '. Drop it on the ' + OTHER_SIDE[slot] + '.'] });
+      if (!mine.length) { var mz = (firstMiss && firstMiss.missing[slot]) || [], pz = ['No ' + LABEL[slot] + ' found in this zip. Missing column' + (mz.length > 1 ? 's' : '') + ': '];
+        mz.forEach(function(m, i){ if (i) pz.push(', '); pz.push(code(m)); }); pz.push('.');
+        return setSlot(slot, { status: 'error', fileName: name, title: 'Not a ' + LABEL[slot], msg: pz }); }
+      sheets = mine[0].sh; id = mine[0].id; inner = mine[0].en.name;
+    } else {
+    try { sheets = WCR.parseFile(XLSX, new Uint8Array(buf), name); }
+    catch (err) {
+      var pw = /password|encrypt|ECMA-376|CFB/i.test(String(err && err.message));
+      return setSlot(slot, { status: 'error', fileName: name, title: pw ? 'Password-protected file' : 'Couldn’t read this file',
+        msg: [pw ? 'Remove the password in Excel, save, and upload again.' : 'It may be damaged or not a real spreadsheet. Export it again and retry.'] });
+    }
+    if (my !== tokens[slot]) return;
+    id = WCR.identify(sheets);
+    }
+    if (id.kind === other) return setSlot(slot, { status: 'error', fileName: name, title: 'Wrong file for this slot',
+      msg: ['This looks like a ' + LABEL[other] + '. Drop it on the ' + OTHER_SIDE[slot] + '.'] });
+    if (id.kind === 'ambiguous') return setSlot(slot, { status: 'error', fileName: name, title: 'Can’t tell which report this is',
+      msg: ['It has the key columns of both reports. Upload the original ' + LABEL[slot] + ' export.'] });
+    if (id.kind !== slot) {
+      var miss = id.missing[slot], parts = ['This doesn’t look like ' + LABEL[slot] + '. Missing column' + (miss.length > 1 ? 's' : '') + ': '];
+      miss.forEach(function(m, i){ if (i) parts.push(', '); parts.push(code(m)); });
+      parts.push('.');
+      return setSlot(slot, { status: 'error', fileName: name, title: 'Not a ' + LABEL[slot], msg: parts });
+    }
+    var t = id.table; t.fileName = name;
+    if (!t.rows.length) return setSlot(slot, { status: 'error', fileName: name, title: 'No data rows', msg: ['The header row is there, but there are no rows under it.'] });
+    var s = { status: 'loaded', fileName: name, table: t, note: multi,
+      sheetNote: inner ? 'Using ' + inner + ' from the zip' : sheets.length > 1 ? 'Using sheet “' + t.sheetName + '”' : null };
+    if (slot === 'r52') {
+      var ans = WCR.countAnswered(t);
+      s.answered = ans;
+      s.stats = [[t.rows.length, 'rows'], [ans, ans === 1 ? 'answered call' : 'answered calls']];
+      if (!ans) s.note = 'No ANSWERED calls. The file will keep every row, with Stoic columns blank.';
+    } else {
+      var si = t.map[WCR.normHeader('Call Status')];
+      if (si !== undefined) {
+        var done = t.rows.filter(function(r){ return /^(completed|answered|success)$/.test(WCR.cellText(r[si]).trim().toLowerCase()); }).length;
+        s.stats = [[t.rows.length, t.rows.length === 1 ? 'call' : 'calls'], [done, 'completed']];
+        if (!done) s.note = 'No completed calls in this file, so no survey answers will be added.';
+      } else s.stats = [[t.rows.length, t.rows.length === 1 ? 'call' : 'calls'], [Object.keys(t.map).length, 'columns']];
+    }
+    setSlot(slot, s);
+    announce(LABEL[slot] + ' loaded: ' + name);
+  }).catch(function(){
+    if (my !== tokens[slot]) return;
+    setSlot(slot, { status: 'error', fileName: name, title: 'Couldn’t open this file', msg: ['Your browser couldn’t read it. Try saving it to your computer first.'] });
+  });
+}
+
+// ---------- CTA ----------
+var go = document.getElementById('go'), helper = document.getElementById('helper');
+go.addEventListener('click', onGo);
+function refresh(){
+  var a = state.r52, b = state.stoic, grp = window.VBS && VBS.groups ? VBS.selected() : null;
+  var filesReady = a.status === 'loaded' && b.status === 'loaded', ready = filesReady && !!grp && grp.vars.length > 0;
+  go.innerHTML = svg('dl', 20) + '<span>Merge &amp; Download Excel</span>';
+  go.disabled = !ready || busy;
+  helper.innerHTML = '';
+  if (busy) { helper.textContent = 'Preparing your Excel file…'; return; }
+  if (ready) {
+    try { if (!state.merged || state.merged.groupKey !== groupKey()) { state.merged = WCR.merge(a.table, b.table, grp.vars); state.merged.groupKey = groupKey(); state.merged.groupName = grp.name; } }
+    catch (e) { go.disabled = true; helper.textContent = 'Something went wrong while merging. Re-upload both files.'; return; }
+    helper.appendChild(document.createTextNode('Saves as '));
+    helper.appendChild(el('span', { class: 'mono', text: state.merged.fileName }));
+    return;
+  }
+  var need = [];
+  if (a.status === 'reading' || b.status === 'reading') { helper.textContent = 'Reading files…'; return; }
+  if (a.status !== 'loaded') need.push((a.status === 'error' ? 'a valid ' : '') + 'Report 52');
+  if (b.status !== 'loaded') need.push((b.status === 'error' ? 'a valid ' : '') + 'Stoic Report');
+  if (!grp) need.push(VBS.groups().length ? 'a variable group' : 'a variable group (create one in Settings)');
+  else if (!grp.vars.length) { helper.textContent = '“' + grp.name + '” has no variables yet. Add some in Settings.'; if (!need.length) return; }
+  helper.textContent = 'Waiting for ' + (need.length > 1 ? need.slice(0, -1).join(', ') + ' and ' + need[need.length - 1] : need[0]);
+}
+
+var busy = false;
+function onGo(){
+  if (go.disabled) return;
+  refresh();
+  var m = state.merged; if (!m) return;
+  if (m.rows.length !== state.r52.table.rows.length) { state.result = { m: m, countError: true, groupKey: m.groupKey }; renderResults(); announce('Row count check failed. Nothing was downloaded.'); return; }
+  if (m.counts.answered > 0 && m.counts.matched === 0) { state.result = { m: m, blocked: true, groupKey: m.groupKey }; renderResults(); announce('No calls matched. Nothing was downloaded.'); return; }
+  state.result = { m: m, save: 'saving', groupKey: m.groupKey };
+  renderResults();
+  if (VBS.selected()) VBS.markUsed(VBS.selected().id);
+  save(m);
+}
+
+function save(m){
+  busy = true; refresh();
+  if (state.result) { state.result.save = 'saving'; renderResults(); }
+  setTimeout(function(){ build(); }, 40);   // let "Preparing…" paint before the workbook is built
+  function build(){
+  var built;
+  try { built = WCR.toXlsx(XLSX, m); }
+  catch (e) { busy = false; if (state.result) { state.result.save = 'error'; state.result.saveCode = 'build'; renderResults(); } refresh(); return; }
+  if (state.result) state.result.truncated = built.truncated;
+  var blob = new Blob([built.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  deliver(m.fileName, blob).then(function(res){ finish(res); }, function(err){ finish({ status: 'error', code: err && err.code, message: err && err.message }); });
+  }
+  function finish(res){
+    busy = false;
+    if (state.result && state.result.m === m) { state.result.save = res.status; state.result.saveCode = res.code; renderResults(); }
+    refresh();
+    announce(res.status === 'saved' ? 'Excel file downloaded.' : res.status === 'started' ? 'Excel file download started.' : res.status === 'declined' ? 'Download cancelled.' : 'The Excel file could not be saved.');
+  }
+}
+
+function deliver(fileName, blob){
+  var hasClaude = window.claude && typeof window.claude.use === 'function';
+  if (!hasClaude) return Promise.resolve(anchorSave(fileName, blob));
+  return window.claude.use('downloads').then(function(d){
+    if (!d) return anchorSave(fileName, blob, true);
+    return d.save({ filename: fileName, data: blob }).then(function(){ return { status: 'saved' }; }, function(err){
+      var c = err && err.code;
+      if (c === 'declined') return { status: 'declined' };
+      if (c === 'rate_limited') return { status: 'error', code: c, message: 'A save prompt is already open. Finish it, then try again.' };
+      return { status: 'error', code: c || 'unavailable', message: 'This view can’t save files. Open the page in claude.ai in a browser and try again.' };
+    });
+  }, function(){ return anchorSave(fileName, blob, true); });
+}
+function anchorSave(fileName, blob, uncertain){
+  try {
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = fileName; a.rel = 'noopener'; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 4000);
+    return { status: 'started', code: uncertain ? 'uncertain' : null };
+  } catch (e) { return { status: 'error', message: 'Your browser blocked the download.' }; }
+}
+
+// ---------- results ----------
+function renderResults(){
+  var box = document.getElementById('results');
+  box.innerHTML = '';
+  var r = state.result;
+  if (!r) { box.hidden = true; return; }
+  box.hidden = false;
+  var m = r.m, c = m.counts;
+
+  if (r.countError) {
+    box.appendChild(el('div', { class: 'panel stop done', role: 'alert' }, [ el('div', { class: 'done-l' }, [ el('span', { class: 'badge err', html: svg('alert', 20) }),
+      el('div', { class: 'file-meta' }, [ el('span', { class: 'done-title', text: 'Row count check failed' }),
+        el('span', { class: 'msg', text: 'The file would have ' + fmt(m.rows.length) + ' rows but Report 52 has ' + fmt(state.r52.table.rows.length) + ' records, so nothing was downloaded. Please report this file.' }) ]) ]) ]));
+    return;
+  }
+  if (r.blocked) {
+    box.appendChild(el('div', { class: 'panel stop done', role: 'alert' }, [
+      el('div', { class: 'done-l' }, [ el('span', { class: 'badge err', html: svg('alert', 20) }),
+        el('div', { class: 'file-meta' }, [ el('span', { class: 'done-title', text: 'No answered call matched a Stoic call' }),
+          el('span', { class: 'msg', text: 'The files may be from different batches or dates. Nothing was downloaded.' }) ]) ]),
+      el('button', { type: 'button', class: 'btn secondary', onclick: function(){ state.result = { m: m, save: 'saving', groupKey: m.groupKey }; renderResults(); save(m); } }, [ icon('dl', '', 18), 'Download anyway' ])
+    ]));
+  } else {
+    var st = r.save, title, sub = m.fileName, badge = 'ok', ic = 'check', btnLabel = 'Download again';
+    if (st === 'saving') { title = 'Preparing download…'; badge = 'wait'; ic = null; }
+    else if (st === 'saved') title = 'Downloaded · ' + fmt(m.rows.length) + ' rows · ' + m.header.length + ' columns';
+    else if (st === 'started') title = 'Download started · ' + fmt(m.rows.length) + ' rows · ' + m.header.length + ' columns';
+    else if (st === 'declined') { title = 'Download cancelled'; badge = 'warn'; ic = 'warn'; btnLabel = 'Download Excel'; }
+    else { title = 'Couldn’t save the Excel file'; badge = 'err'; ic = 'alert'; btnLabel = 'Try again'; sub = r.saveCode === 'build' ? 'Something went wrong while building the workbook. Re-upload both files and try again.' : r.saveCode === 'rate_limited' ? 'A save prompt is already open. Finish it, then try again.' : 'This view can’t save files. Open the page in claude.ai in a browser and try again.'; }
+    var badgeEl = ic ? el('span', { class: 'badge ' + badge, html: svg(ic, 20) }) : el('span', { class: 'badge wait' }, [ el('span', { class: 'spin', 'aria-hidden': 'true' }) ]);
+    box.appendChild(el('div', { class: 'panel done' }, [
+      el('div', { class: 'done-l' }, [ badgeEl, el('div', { class: 'file-meta' }, [ el('span', { class: 'done-title', text: title }), el('span', { class: st === 'error' ? 'msg' : 'done-sub', text: sub }) ]) ]),
+      st === 'saving' ? null : el('button', { type: 'button', class: 'btn secondary', onclick: function(){ save(m); } }, [ icon('dl', '', 18), btnLabel ])
+    ]));
+  }
+
+  // warnings
+  var warns = [];
+  if (m.missing.r52.length) warns.push(missingNote('Report 52', m.missing.r52));
+  if (m.dupHeaders.r52.length) warns.push(dupNote('Report 52', m.dupHeaders.r52));
+  if (!c.answered) warns.push(['Report 52 has no ANSWERED calls, so no survey data was added. Every row is in the file with Stoic columns blank.']);
+  if (c.blankRowsSkipped) warns.push(['Report 52 had ' + fmt(c.blankRowsSkipped) + ' empty ' + (c.blankRowsSkipped === 1 ? 'row' : 'rows') + ' between records. ' + (c.blankRowsSkipped === 1 ? 'It holds' : 'They hold') + ' no data and ' + (c.blankRowsSkipped === 1 ? 'was' : 'were') + ' skipped; every record is in the file.']);
+  if (c.dupAnswered) warns.push([fmt(c.dupAnswered) + ' ANSWERED ' + (c.dupAnswered === 1 ? 'row repeats' : 'rows repeat') + ' an earlier row with the same ', code('Id'), '. Both copies are kept and carry the same Stoic data.']);
+  if (m.otherSheets.r52.length) warns.push(['Report 52 has other sheets that also look like Report 52 (' + m.otherSheets.r52.join(', ') + '). Only “' + state.r52.table.sheetName + '” was used.']);
+  if (m.otherSheets.stoic.length) warns.push(['The Stoic file has other sheets that also look like a Stoic Report (' + m.otherSheets.stoic.join(', ') + '). Only “' + state.stoic.table.sheetName + '” was used.']);
+  if (r.truncated && r.truncated.length) { var tp = [fmt(r.truncated.length) + (r.truncated.length === 1 ? ' cell was' : ' cells were') + ' longer than Excel’s 32,767-character limit and ' + (r.truncated.length === 1 ? 'was' : 'were') + ' cut to fit: '];
+    r.truncated.slice(0, 10).forEach(function(t, i){ if (i) tp.push(', '); tp.push(code(t.column + ' row ' + t.row)); }); if (r.truncated.length > 10) tp.push(' and ' + fmt(r.truncated.length - 10) + ' more'); tp.push('.'); warns.push(tp); }
+  if (c.bigGap) warns.push([fmt(c.bigGap) + (c.bigGap === 1 ? ' match is' : ' matches are') + ' more than 30 minutes apart from the Stoic call. Check that both files are from the same batch.']);
+  if (c.notCompleted) warns.push([fmt(c.notCompleted) + (c.notCompleted === 1 ? ' answered call was' : ' answered calls were') + ' matched to a Stoic call whose status isn’t “completed”. Its survey answers may be blank.']);
+  if (c.untimed) warns.push([fmt(c.untimed) + (c.untimed === 1 ? ' match was' : ' matches were') + ' made without a usable call time (', code('Call Answered At'), ' / ', code('Call Attempt Time'), '). Pairing used loan ID and mobile only.']);
+  if (warns.length) box.appendChild(el('div', { class: 'notes' }, warns.map(function(w){ return el('div', { class: 'note' }, [ icon('warn', 'ic', 16), el('span', {}, w) ]); })));
+  var gset = {}; m.header.slice(29).forEach(function(h){ gset[WCR.normHeader(h)] = 1; });
+  var twice = m.dupHeaders.stoic.filter(function(n){ return gset[WCR.normHeader(n)]; });
+  if (twice.length) box.appendChild(el('div', { class: 'info-line' }, [ icon('info', 'ic', 16), el('span', {}, [
+    twice.length === 1 ? code(twice[0]) : twice.map(function(n, i){ return (i ? ', ' : '') + n; }).join(''),
+    twice.length === 1 ? ' is in the Stoic file twice (the call’s input and its result). Using the result.' : ' each appear twice in the Stoic file. Using the call’s result for each.' ]) ]));
+
+  // row check
+  var lists = el('div', { style: 'display:flex; flex-direction:column; gap:12px' });
+  var panel = el('div', { class: 'panel panel-pad' }, [ el('h3', { text: 'Row check' }),
+    flow('Report 52', [chip(c.r52Rows, 'records'), chip(c.outRows, 'in file', c.outRows === c.r52Rows)], [], lists, typeLine(c.types)),
+    flow('Answered', [chip(c.answered, 'answered'), chip(c.matched, 'matched', c.matched === c.answered)],
+      [{ n: c.unmatched, label: 'unmatched', rows: m.unmatched, title: 'Answered calls without a Stoic match (in the file with Stoic columns blank)' }], lists),
+    flow('Stoic', c.hasStatus ? [chip(c.stoicRows, 'calls'), chip(c.stoicAnswered, 'completed'), chip(c.used, 'used', c.used === c.stoicAnswered)]
+                              : [chip(c.stoicRows, 'calls'), chip(c.used, 'used', c.used === c.stoicRows)],
+      [ c.notAnswered ? { n: c.notAnswered, label: 'not answered', neutral: true, rows: m.excluded.filter(function(x){ return x.expected; }), title: 'Stoic calls that weren’t answered (expected, not attached)' } : null,
+        { n: c.excluded - c.notAnswered, label: 'excluded', rows: m.excluded.filter(function(x){ return !x.expected; }), title: 'Completed Stoic calls not attached to any row' } ], lists),
+    lists,
+    el('div', { class: 'foot-note' }, ['Every Report 52 row is in the file, with the same cell formats as its source. The “' + (m.groupName || '') + '” variables are filled only on ANSWERED rows, matched on ', code('client_loan_id'), ' + mobile number (last 10 digits). ',
+      (c.unmatched || c.excluded - c.notAnswered) ? 'Open the amber counts to see each row and the reason.' : 'Every row is accounted for.'])
+  ]);
+  box.appendChild(panel);
+
+  // column check + preview
+  var found = m.columns.filter(function(x){ return x.found; }).length, total = m.columns.length;
+  var reqMissing = m.columns.filter(function(x){ return !x.found && !x.optional; }).length;
+  var optMissing = m.columns.filter(function(x){ return !x.found && x.optional; }).length;
+  var perSrc = m.columns.filter(function(x){ return x.source === 'Report 52'; }).length + ' from Report 52 · ' + m.columns.filter(function(x){ return x.source === 'Stoic'; }).length + ' from “' + (m.groupName || 'group') + '”';
+  var colBody = el('div', { class: 'row-body', hidden: '' }, [ el('div', { class: 'colgrid' }, ['Report 52', 'Stoic'].map(function(src){
+    return el('div', {}, [ el('h4', { text: src === 'Stoic' ? 'From Stoic · ' + (m.groupName || '') : 'From ' + src }), el('ul', { class: 'collist' }, m.columns.filter(function(x){ return x.source === src; }).map(function(x){
+      if (!x.found && x.optional) return el('li', { style: 'color:var(--muted)' }, [ el('span', { style: 'width:14px; display:inline-block', 'aria-hidden': 'true', text: '–' }), el('span', { text: x.name }), el('span', { style: 'font-family:var(--sans)', text: '· not in this Stoic file, left blank' }) ]);
+      var dup = x.source === 'Stoic' && m.dupHeaders.stoic.some(function(n){ return WCR.normHeader(n) === WCR.normHeader(x.name); });
+      return el('li', { class: x.found ? '' : 'miss' }, [ icon(x.found ? 'check' : 'warn', x.found ? 'ic-ok' : 'ic-warn', 14), el('span', { text: x.name }),
+        x.found ? (dup ? el('span', { style: 'font-family:var(--sans); color:var(--muted)', text: '· call’s result (the file has this column twice)' }) : null) : el('span', { style: 'font-family:var(--sans)', text: '· missing, left blank' }) ]);
+    })) ]);
+  })) ]);
+  var prevBody = el('div', { class: 'row-body', hidden: '' }, [ previewTable(m) ]);
+  box.appendChild(el('div', { class: 'panel' }, [
+    toggle([ icon(!reqMissing ? 'check' : 'warn', !reqMissing ? 'ic-ok' : 'ic-warn', 18), el('span', { class: 't', text: fmt(found) + ' of ' + fmt(total) + ' columns found' }),
+      el('span', { class: 's', text: optMissing ? perSrc + ' · ' + optMissing + ' not in this Stoic file (blank)' : perSrc }) ], colBody),
+    colBody,
+    el('div', { class: 'divider' }),
+    toggle([ el('span', { class: 't', text: m.rows.length ? 'Preview first ' + Math.min(5, m.rows.length) + ' rows' : 'Preview (no rows)' }) ], prevBody),
+    prevBody
+  ]));
+
+  box.appendChild(el('div', { class: 'center' }, [ el('button', { type: 'button', class: 'link quiet', onclick: clearAll, text: 'Clear all and start over' }) ]));
+}
+
+function missingNote(src, names){ var p = [names.length + ' column' + (names.length > 1 ? 's' : '') + ' not found in ' + src + ': ']; names.forEach(function(n, i){ if (i) p.push(', '); p.push(code(n)); }); p.push('. ' + (names.length > 1 ? 'They are' : 'It is') + ' left blank in the file.'); return p; }
+function dupNote(src, names){ var p = [src + ' has repeated column names: ']; names.forEach(function(n, i){ if (i) p.push(', '); p.push(code(n)); });
+  p.push(src === 'Stoic Report' ? '. Where a group variable has that name, the post-call result (the later column) was used.' : '. The first one of each was used.'); return p; }
+function chip(n, label, good){ return el('span', { class: 'chip' + (good ? ' ok' : '') }, [ el('b', { text: fmt(n) }), el('span', { text: label }) ]); }
+function typeLine(types){
+  var order = { SENT: 0, ANSWERED: 1, UNANSWERED: 2 };
+  var t = types.slice().sort(function(a, b){ return (a[0] in order ? order[a[0]] : 9) - (b[0] in order ? order[b[0]] : 9); });
+  return el('span', { class: 'exc', style: 'white-space:normal' }, [ t.map(function(x){ return fmt(x[1]) + ' ' + (x[0] === '(BLANK)' ? 'blank Action Type' : x[0]); }).join(' · ') ]);
+}
+function flow(label, chips, excs, listsBox, extra){
+  var chipBox = el('div', { class: 'flow-chips' }), parts = [ el('span', { class: 'flow-label', text: label }), chipBox ];
+  chips.forEach(function(ch, i){ if (i) chipBox.appendChild(el('span', { class: 'arrow', html: svg('arrow', 16) })); chipBox.appendChild(ch); });
+  var grp = el('div', { class: 'exc-group' });
+  if (extra) grp.appendChild(extra);
+  excs.forEach(function(x){
+    if (!x) return;
+    if (!x.n) { grp.appendChild(el('span', { class: 'exc' }, [ icon('check', 'ic-ok', 16), '0 ' + x.label ])); return; }
+    var list = excList(x.rows, x.title); list.hidden = true; listsBox.appendChild(list);
+    var b = el('button', { type: 'button', class: 'chip-btn' + (x.neutral ? ' neutral' : ''), 'aria-expanded': 'false', onclick: function(){
+      var open = b.getAttribute('aria-expanded') === 'true'; b.setAttribute('aria-expanded', String(!open)); list.hidden = open; } },
+      [ x.neutral ? null : icon('warn', '', 16), el('span', { class: 'num', text: fmt(x.n) }), ' ' + x.label, icon('chev', '', 16) ]);
+    grp.appendChild(b);
+  });
+  if (grp.childNodes.length) parts.push(grp);
+  return el('div', { class: 'flow' }, parts);
+}
+function excList(rows, title){
+  var LIMIT = 300, t = el('table', {}, [ el('thead', {}, [ el('tr', {}, ['Loan ID', 'Mobile', 'Name', 'Reason'].map(function(h){ return el('th', { scope: 'col', text: h }); })) ]),
+    el('tbody', {}, rows.slice(0, LIMIT).map(function(x){ return el('tr', {}, [ el('td', { class: 'mono', text: x.loan || '—' }), el('td', { class: 'mono', text: x.mobile || '—' }), el('td', { text: x.name || '—' }), el('td', { class: 'reason', text: x.reason }) ]); })) ]);
+  return el('div', { style: 'display:flex; flex-direction:column; gap:8px' }, [ el('div', { style: 'font-size:13px; font-weight:600; color:var(--muted)', text: title }),
+    el('div', { class: 'list-wrap' }, [ t, rows.length > LIMIT ? el('div', { class: 'more', text: 'and ' + fmt(rows.length - LIMIT) + ' more' }) : null ]) ]);
+}
+function toggle(kids, body){
+  var b = el('button', { type: 'button', class: 'row-toggle', 'aria-expanded': 'false', onclick: function(){
+    var open = b.getAttribute('aria-expanded') === 'true'; b.setAttribute('aria-expanded', String(!open)); body.hidden = open; } },
+    kids.concat([ el('span', { class: 'chev', html: svg('chev', 18) }) ]));
+  return b;
+}
+function previewTable(m){
+  if (!m.rows.length) return el('p', { class: 'helper', style: 'text-align:left', text: 'No answered calls to preview.' });
+  var rows = m.rows.slice(0, 5);
+  return el('div', { class: 'preview', tabindex: '0', role: 'region', 'aria-label': 'Preview of the first rows' }, [ el('table', {}, [
+    el('thead', {}, [ el('tr', {}, m.header.map(function(h){ return el('th', { scope: 'col', text: h }); })) ]),
+    el('tbody', {}, rows.map(function(r){ return el('tr', {}, r.map(function(v){
+      var s = String(v); return el('td', { class: s ? '' : 'empty', title: s.length > 600 ? s.slice(0, 600) + '…' : s, text: s ? (s.length > 160 ? s.slice(0, 160) + '…' : s) : '—' }); })); }))
+  ]) ]);
+}
+
+function clearAll(){
+  tokens.r52++; tokens.stoic++;
+  state = { r52: { status: 'empty' }, stoic: { status: 'empty' }, merged: null, result: null };
+  renderZone('r52'); renderZone('stoic'); renderResults(); refresh();
+  var p = document.querySelector('#zone-r52 .pick'); if (p) p.focus();
+  announce('Cleared. Upload both files to start again.');
+}
+
+// ================= v2: variable groups (step 3) + settings drawer =================
+Object.assign(ICON, {
+  gear: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path>',
+  x: '<path d="M6 6l12 12"></path><path d="M18 6L6 18"></path>',
+  plus: '<path d="M12 5v14"></path><path d="M5 12h14"></path>',
+  mvup: '<path d="M6 15l6-6 6 6"></path>', mvdown: '<path d="M6 9l6 6 6-6"></path>',
+  grip: '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>',
+  info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path>',
+  clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>',
+  trash: '<path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 13h10l1-13"></path><path d="M9 7V4h6v3"></path>',
+  cloud: '<path d="M7 18a4 4 0 0 1-.5-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17.5 18z"></path>'
+});
+VBS.init();
+var ui = { open: false, openId: null, confirmDel: null, picker: {}, notes: {}, importPending: null, drawerMsg: null, returnFocus: null };
+var R52_KEYS = {}; WCR.R52_COLUMNS.forEach(function(n){ R52_KEYS[WCR.normHeader(n)] = 1; });
+
+function stoicKeys(){ var t = state.stoic.status === 'loaded' ? state.stoic.table : null; if (!t) return null; var k = {}; Object.keys(t.map).forEach(function(x){ k[x] = 1; }); return k; }
+function inFile(vars, keys){ return vars.filter(function(v){ return keys[WCR.normHeader(v)]; }).length; }
+function groupKey(){ var g = VBS.selected(); return g ? g.id + '|' + JSON.stringify(g.vars) : ''; }
+
+VBS.onChange(function(src){
+  if (src === 'status') { renderSaved(); return; }                   // an autosave: only the label changes
+  if (state.result && state.result.groupKey !== groupKey()) state.result = null;
+  if (state.merged && state.merged.groupKey !== groupKey()) state.merged = null;
+  renderGroups(); renderResults(); refresh();
+  if (ui.open) renderDrawer(); else renderSaved();
+});
+
+// ---------- step 3 ----------
+function renderGroups(){
+  var z = document.getElementById('group-zone'); z.innerHTML = '';
+  var gs = VBS.groups(), sel = VBS.selected(), keys = stoicKeys();
+  if (!gs.length) {                                                     // same look as an empty upload box
+    z.className = 'zone group-none';
+    z.appendChild(el('button', { type: 'button', class: 'pick', onclick: function(){ openDrawer(VBS.create('New group', [])); } }, [
+      el('span', { class: 'pick-icon', html: svg('plus', 22) }),
+      el('span', { class: 'pick-main' }, [ 'Create a ', el('u', { text: 'variable group' }) ]),
+      el('span', { class: 'pick-sub', text: 'The Stoic variables to add after the Report 52 columns' }) ]));
+    return;
+  }
+  var n = sel ? sel.vars.length : 0, found = sel && keys ? inFile(sel.vars, keys) : null;
+  var warn = !sel || !n;
+  z.className = 'zone ' + (warn ? 'group-warn' : 'group-ready');
+  var select = el('select', { class: 'gsel', id: 'group-select', 'aria-labelledby': 'h-group', onchange: function(){ VBS.select(select.value); } },
+    (sel ? [] : [ el('option', { value: '', text: 'Choose a group…' }) ]).concat(gs.map(function(g){
+      var o = el('option', { value: g.id, text: g.name + '  (' + g.vars.length + ')' }); if (sel && g.id === sel.id) o.selected = true; return o; })));
+  var tag = !sel ? 'Choose a group' : !n ? 'No variables yet' : 'Group selected';
+  var inner = el('div', { class: 'card-in' }, [
+    el('div', { class: 'file-row' }, [
+      el('span', { class: 'badge ' + (warn ? 'warn' : 'ok'), html: svg(warn ? 'warn' : 'check', 20) }),
+      el('div', { class: 'file-meta', style: 'flex:1' }, [
+        el('span', { class: 'tag ' + (warn ? 'warn' : 'ok'), text: tag }),
+        el('div', { class: 'gsel-wrap' }, [ select, el('span', { class: 'chev', html: svg('chev', 18) }) ]),
+        sel && n && keys && found < n ? el('span', { class: 'msg', style: 'color:var(--muted); font-size:13px', text: fmt(n - found) + ' not in this Stoic file (will be blank)' }) : null,
+        sel && !n ? el('span', { class: 'msg', style: 'color:var(--muted); font-size:13px', text: 'Add variables in Manage groups.' }) : null ]) ]),
+    el('div', { class: 'stats-row' }, [
+      el('div', { class: 'stats' }, sel ? [ el('div', { class: 'stat' }, [ el('b', { text: fmt(n) }), el('span', { text: n === 1 ? 'variable' : 'variables' }) ]),
+          keys ? el('div', { class: 'stat' }, [ el('b', { text: fmt(found) }), el('span', { text: 'in this file' }) ]) : el('div', { class: 'stat' }, [ el('b', { text: fmt(gs.length) }), el('span', { text: gs.length === 1 ? 'group' : 'groups' }) ]) ]
+        : [ el('div', { class: 'stat' }, [ el('b', { text: fmt(gs.length) }), el('span', { text: gs.length === 1 ? 'group' : 'groups' }) ]) ]),
+      el('button', { type: 'button', class: 'link', id: 'manage', onclick: function(){ openDrawer(VBS.selected() ? VBS.selected().id : null); }, text: 'Manage groups' }) ]) ]);
+  z.appendChild(inner);
+}
+
+// ---------- drawer ----------
+var drawer = document.getElementById('settings'), backdrop = document.getElementById('backdrop'), gearBtn = document.getElementById('gear');
+gearBtn.insertAdjacentHTML('afterbegin', svg('gear', 20)); gearBtn.innerHTML = gearBtn.innerHTML.replace('', '');
+document.getElementById('close-set').innerHTML = svg('x', 20);
+document.getElementById('new-group').insertAdjacentHTML('afterbegin', svg('plus', 18)); document.getElementById('new-group').innerHTML = document.getElementById('new-group').innerHTML.replace('', '');
+gearBtn.addEventListener('click', function(){ ui.open ? closeDrawer() : openDrawer(); });
+document.getElementById('close-set').addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+drawer.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') { e.preventDefault(); closeDrawer(); return; }
+  if (e.key !== 'Tab') return;                                   // keep focus inside the open dialog
+  var f = [].slice.call(drawer.querySelectorAll('button:not([disabled]), input:not([type=file]):not([disabled]), textarea, [tabindex="0"]')).filter(function(x){ return x.offsetParent !== null; });
+  if (!f.length) return;
+  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+  else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+});
+document.getElementById('new-group').addEventListener('click', function(){ var id = VBS.create('New group', []); ui.openId = id; ui.focusAfter = 'name-' + id; renderDrawer(); });
+document.getElementById('export-set').addEventListener('click', exportSettings);
+document.getElementById('import-set').addEventListener('click', function(){ var i = document.getElementById('in-import'); i.value = ''; i.click(); });
+document.getElementById('in-import').addEventListener('change', function(){ var f = this.files && this.files[0]; if (f) readImport(f); this.value = ''; });
+
+function openDrawer(openId){
+  ui.returnFocus = document.activeElement; ui.open = true;
+  if (openId !== undefined) ui.openId = openId;
+  if (ui.openId && !VBS.group(ui.openId)) ui.openId = null;
+  drawer.hidden = false; backdrop.hidden = false; gearBtn.setAttribute('aria-expanded', 'true');
+  document.body.style.overflow = 'hidden';
+  renderDrawer();
+  var first = ui.openId ? drawer.querySelector('[data-fid="name-' + ui.openId + '"]') : document.getElementById('close-set');
+  (first || document.getElementById('close-set')).focus();
+}
+function closeDrawer(){
+  ui.open = false; drawer.hidden = true; backdrop.hidden = true; gearBtn.setAttribute('aria-expanded', 'false');
+  document.body.style.overflow = ''; ui.confirmDel = null; ui.importPending = null; ui.drawerMsg = null;
+  (ui.returnFocus && document.contains(ui.returnFocus) ? ui.returnFocus : gearBtn).focus();
+}
+function renderSaved(){
+  var st = VBS.status(), s = document.getElementById('saved'); s.className = 'saved' + (st.local ? '' : ' bad'); s.innerHTML = '';
+  if (!st.local) { s.appendChild(icon('warn', '', 14)); s.appendChild(document.createTextNode('Can’t save in this browser. Use Export to keep your groups.')); return; }
+  if (st.dirty) { s.appendChild(icon('clock', '', 14)); s.appendChild(document.createTextNode('Unsaved changes · autosaves every ' + st.every + ' seconds')); return; }
+  s.appendChild(icon('check', 'ic-ok', 14));
+  var t = 'Saved in this browser' + (st.savedAt ? ' at ' + st.savedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '') + ' · autosaves every ' + st.every + ' seconds';
+  if (st.remote === 'synced') t += ' · synced to your claude.ai account';
+  else if (st.remote === 'connecting') t += ' · syncing…';
+  else if (st.remote === 'error') t += ' · claude.ai sync unavailable right now';
+  s.appendChild(document.createTextNode(t));
+}
+
+function renderDrawer(){
+  renderSaved();
+  var body = document.getElementById('set-body'), fid = document.activeElement && document.activeElement.getAttribute('data-fid');
+  var scroll = body.scrollTop; body.innerHTML = '';
+  if (ui.drawerMsg) body.appendChild(el('div', { class: ui.drawerMsg.bad ? 'confirm' : 'import-box', role: 'status' }, [ el('span', { text: ui.drawerMsg.text }) ]));
+  if (ui.importPending) body.appendChild(importBox());
+  body.appendChild(el('p', { class: 'msg', style: 'margin:0; color:var(--muted)', text: 'A group is the list of Stoic variables added after the Report 52 columns, in this order. Variables not in a Stoic file come out blank.' }));
+  var gs = VBS.groups();
+  if (!gs.length) body.appendChild(el('div', { class: 'empty-vars', text: 'No groups yet. Use “New group” below.' }));
+  gs.forEach(function(g){ body.appendChild(groupCard(g)); });
+  body.scrollTop = scroll;
+  var target = ui.focusAfter || fid; ui.focusAfter = null;
+  if (target) { var t = body.querySelector('[data-fid="' + target + '"]'); if (t) t.focus(); }
+}
+
+function groupCard(g){
+  var open = ui.openId === g.id, keys = stoicKeys();
+  var head = el('button', { type: 'button', class: 'gcard-head', 'aria-expanded': String(open), 'data-fid': 'head-' + g.id, onclick: function(){ ui.openId = open ? null : g.id; ui.confirmDel = null; renderDrawer(); } }, [
+    el('span', { class: 'nm', text: g.name }), el('span', { class: 'ct', text: fmt(g.vars.length) + ' variable' + (g.vars.length === 1 ? '' : 's') }),
+    VBS.selected() && VBS.selected().id === g.id ? el('span', { class: 'ct', style: 'color:var(--accent)', text: '· selected' }) : null,
+    el('span', { class: 'chev', html: svg('chev', 18) }) ]);
+  var trash = el('button', { type: 'button', class: 'icon-btn sm del', 'aria-label': 'Delete group “' + g.name + '”', title: 'Delete group', 'data-fid': 'del-' + g.id, html: svg('trash', 16),
+    onclick: function(){ ui.openId = g.id; ui.confirmDel = g.id; ui.focusAfter = 'delno-' + g.id; renderDrawer(); } });
+  var card = el('div', { class: 'gcard' }, [ el('div', { class: 'gcard-top' }, [ head, trash ]) ]);
+  if (!open) return card;
+  var b = el('div', { class: 'gbody' });
+
+  // name
+  var nameErr = el('span', { class: 'err-text', role: 'alert' });
+  var nameIn = el('input', { type: 'text', id: 'nm-' + g.id, 'data-fid': 'name-' + g.id, value: g.name, maxlength: '80', autocomplete: 'off' });
+  function saveName(){ if (nameIn.value.trim() === g.name) { nameErr.textContent = ''; return; } var r = VBS.rename(g.id, nameIn.value); if (r && r.error) { nameErr.textContent = r.error; } }
+  nameIn.addEventListener('change', saveName);
+  nameIn.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); saveName(); } if (e.key === 'Escape' && nameIn.value !== g.name) { e.stopPropagation(); nameIn.value = g.name; nameErr.textContent = ''; } });
+  b.appendChild(el('div', { class: 'field' }, [ el('label', { for: 'nm-' + g.id, text: 'Group name' }), nameIn, nameErr ]));
+
+  // variables
+  var vf = el('div', { class: 'field' }, [ el('label', { text: 'Variables (' + fmt(g.vars.length) + ')' }) ]);
+  if (keys && g.vars.length) vf.appendChild(el('div', { class: 'legend' }, [ el('span', {}, [ el('span', { class: 'dot in' }), fmt(inFile(g.vars, keys)) + ' in the uploaded Stoic file' ]), el('span', {}, [ el('span', { class: 'dot out' }), fmt(g.vars.length - inFile(g.vars, keys)) + ' not in it (will be blank)' ]) ]));
+  if (!g.vars.length) vf.appendChild(el('div', { class: 'empty-vars', text: 'No variables yet. Add them below.' }));
+  else vf.appendChild(varList(g, keys));
+  b.appendChild(vf);
+
+  // add
+  var addNote = el('span', { class: 'ok-text', role: 'status', text: ui.notes[g.id] || '' }); ui.notes[g.id] = '';
+  var ta = el('textarea', { id: 'add-' + g.id, 'data-fid': 'add-' + g.id, rows: '2', placeholder: 'e.g.  resume_from_node, last_completed_node   or   "resume_from_node", "last_completed_node"', 'aria-describedby': 'addh-' + g.id });
+  function doAdd(){
+    var raw = WCR.tokenizeVarList(ta.value).filter(function(x){ return WCR.normHeader(String(x).replace(/^["'\u201C\u201D\u2018\u2019`]+|["'\u201C\u201D\u2018\u2019`]+$/g, '')); }).length;
+    var list = WCR.splitVarList(ta.value); if (!list.length) return;
+    var have = {}; g.vars.forEach(function(v){ have[WCR.normHeader(v)] = 1; });
+    var fresh = list.filter(function(v){ return !have[WCR.normHeader(v)]; });
+    var inGroup = list.length - fresh.length, dupInList = raw - list.length, parts = [];
+    if (inGroup) parts.push(fmt(inGroup) + ' already in the group');
+    if (dupInList) parts.push(fmt(dupInList) + ' duplicate' + (dupInList === 1 ? '' : 's') + ' skipped');
+    ui.notes[g.id] = fresh.length ? 'Added ' + fmt(fresh.length) + (parts.length ? ' · ' + parts.join(' · ') : '') : 'Nothing new: ' + (parts.join(' · ') || 'already in the group');
+    ui.focusAfter = 'add-' + g.id;
+    if (fresh.length) VBS.setVars(g.id, g.vars.concat(fresh)); else renderDrawer();
+  }
+  ta.addEventListener('keydown', function(e){ if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doAdd(); } });
+  b.appendChild(el('div', { class: 'field' }, [ el('label', { for: 'add-' + g.id, text: 'Add variables' }), ta,
+    el('div', { class: 'row-gap' }, [ el('button', { type: 'button', class: 'btn primary small', onclick: doAdd }, [ icon('plus', '', 16), 'Add' ]),
+      keys ? el('button', { type: 'button', class: 'btn ghost', 'data-fid': 'pick-' + g.id, 'aria-expanded': String(!!ui.picker[g.id]), onclick: function(){ ui.picker[g.id] = !ui.picker[g.id]; ui.focusAfter = 'pick-' + g.id; renderDrawer(); } }, [ 'Pick from Stoic file' ]) : null,
+      addNote ]),
+    el('span', { id: 'addh-' + g.id, class: 'legend', text: 'Separate names with commas, tabs or new lines; quotes (" or \') are optional. Order is kept. Enter adds · Shift+Enter for a new line.' }) ]));
+  if (keys && ui.picker[g.id]) b.appendChild(picker(g));
+
+  // actions
+  var sel = VBS.selected();
+  var acts = el('div', { class: 'row-gap', style: 'border-top:1px solid var(--line); padding-top:12px' }, [
+    sel && sel.id === g.id ? null : el('button', { type: 'button', class: 'btn ghost', onclick: function(){ VBS.select(g.id); } }, [ 'Use for this run' ]),
+    el('button', { type: 'button', class: 'btn ghost', onclick: function(){ var id = VBS.duplicate(g.id); ui.openId = id; ui.focusAfter = 'name-' + id; renderDrawer(); } }, [ 'Duplicate' ]),
+    g.vars.length ? el('button', { type: 'button', class: 'btn ghost', onclick: function(){ navigator.clipboard && navigator.clipboard.writeText(g.vars.join('\t')).then(function(){ ui.notes[g.id] = 'Copied ' + fmt(g.vars.length) + ' names (tab-separated)'; renderDrawer(); }, function(){}); } }, [ 'Copy names' ]) : null,
+  ]);
+  b.appendChild(acts);
+  if (ui.confirmDel === g.id) b.insertBefore(el('div', { class: 'confirm', role: 'alertdialog', 'aria-label': 'Confirm delete' }, [
+    el('span', { text: 'Delete “' + g.name + '” and its ' + fmt(g.vars.length) + ' variables? This can’t be undone (unless you exported your settings).' }),
+    el('div', { class: 'row-gap' }, [ el('button', { type: 'button', class: 'btn danger', onclick: function(){ ui.confirmDel = null; ui.openId = null; VBS.remove(g.id); } }, [ 'Delete' ]),
+      el('button', { type: 'button', class: 'btn ghost', 'data-fid': 'delno-' + g.id, onclick: function(){ ui.confirmDel = null; ui.focusAfter = 'del-' + g.id; renderDrawer(); } }, [ 'Cancel' ]) ]) ]), b.firstChild);
+  card.appendChild(b);
+  return card;
+}
+
+function varList(g, keys){
+  var ul = el('ul', { class: 'vlist', 'aria-label': 'Variables in ' + g.name }), dragFrom = null;
+  function move(from, to){ if (to < 0 || to >= g.vars.length || from === to) return; var v = g.vars.slice(), x = v.splice(from, 1)[0]; v.splice(to, 0, x); return v; }
+  g.vars.forEach(function(name, i){
+    var clash = R52_KEYS[WCR.normHeader(name)];
+    var li = el('li', { draggable: 'true' }, [
+      el('span', { class: 'grip', html: svg('grip', 16), title: 'Drag to reorder' }),
+      el('span', { class: 'ix', text: String(i + 1) }),
+      keys ? el('span', { class: 'dot ' + (keys[WCR.normHeader(name)] ? 'in' : 'out'), title: keys[WCR.normHeader(name)] ? 'In the uploaded Stoic file' : 'Not in the uploaded Stoic file — will be blank' }) : null,
+      el('span', { class: 'vn' }, [ name, clash ? el('div', { class: 'clash', text: 'Also a Report 52 column: the output will have two columns with this name' }) : null ]),
+      el('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Move ' + name + ' up', 'data-fid': 'up-' + g.id + '-' + i, disabled: i === 0 ? '' : null, html: svg('mvup', 16),
+        onclick: function(){ ui.focusAfter = 'up-' + g.id + '-' + Math.max(1, i - 1); if (i - 1 === 0) ui.focusAfter = 'down-' + g.id + '-0'; VBS.setVars(g.id, move(i, i - 1)); } }),
+      el('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Move ' + name + ' down', 'data-fid': 'down-' + g.id + '-' + i, disabled: i === g.vars.length - 1 ? '' : null, html: svg('mvdown', 16),
+        onclick: function(){ ui.focusAfter = 'down-' + g.id + '-' + Math.min(g.vars.length - 2, i + 1); if (i + 1 === g.vars.length - 1) ui.focusAfter = 'up-' + g.id + '-' + (i + 1); VBS.setVars(g.id, move(i, i + 1)); } }),
+      el('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Remove ' + name, 'data-fid': 'rm-' + g.id + '-' + i, html: svg('x', 16),
+        onclick: function(){ ui.focusAfter = g.vars.length > 1 ? 'rm-' + g.id + '-' + Math.min(i, g.vars.length - 2) : 'add-' + g.id; VBS.setVars(g.id, g.vars.filter(function(_, k){ return k !== i; })); } })
+    ]);
+    li.addEventListener('dragstart', function(e){ dragFrom = i; li.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', name); } catch (x) {} });
+    li.addEventListener('dragend', function(){ li.classList.remove('dragging'); });
+    li.addEventListener('dragover', function(e){ if (dragFrom === null) return; e.preventDefault(); li.classList.add('over'); });
+    li.addEventListener('dragleave', function(){ li.classList.remove('over'); });
+    li.addEventListener('drop', function(e){ e.preventDefault(); e.stopPropagation(); li.classList.remove('over'); if (dragFrom === null) return; var v = move(dragFrom, i); dragFrom = null; if (v) VBS.setVars(g.id, v); });
+    ul.appendChild(li);
+  });
+  return ul;
+}
+
+function picker(g){
+  var t = state.stoic.table, have = {}; g.vars.forEach(function(v){ have[WCR.normHeader(v)] = 1; });
+  var names = t.headerNames.filter(function(n){ return !have[WCR.normHeader(n)]; });
+  var list = el('div', { class: 'picker-list', role: 'group', 'aria-label': 'Stoic columns' }), picked = {};
+  var addBtn = el('button', { type: 'button', class: 'btn primary small', disabled: '' }, [ 'Add selected' ]);
+  function count(){ var n = Object.keys(picked).length; addBtn.disabled = !n; addBtn.textContent = n ? 'Add selected (' + fmt(n) + ')' : 'Add selected'; }
+  function draw(q){
+    list.innerHTML = ''; q = (q || '').toLowerCase();
+    var shown = names.filter(function(n){ return n.toLowerCase().indexOf(q) >= 0; });
+    if (!shown.length) list.appendChild(el('span', { class: 'legend', style: 'padding:6px', text: names.length ? 'No columns match.' : 'Every column in this file is already in the group.' }));
+    shown.forEach(function(n){ var cb = el('input', { type: 'checkbox' }); cb.checked = !!picked[n]; cb.addEventListener('change', function(){ if (cb.checked) picked[n] = 1; else delete picked[n]; count(); });
+      list.appendChild(el('label', {}, [ cb, el('span', { text: n }) ])); });
+    return shown;
+  }
+  var search = el('input', { type: 'text', class: 'search', placeholder: 'Search ' + fmt(names.length) + ' columns', 'aria-label': 'Search Stoic columns', 'data-fid': 'search-' + g.id });
+  var shown = draw('');
+  search.addEventListener('input', function(){ shown = draw(search.value); });
+  var all = el('button', { type: 'button', class: 'btn ghost', onclick: function(){ shown.forEach(function(n){ picked[n] = 1; }); draw(search.value); count(); } }, [ 'Select all shown' ]);
+  addBtn.addEventListener('click', function(){ var add = names.filter(function(n){ return picked[n]; }); ui.notes[g.id] = 'Added ' + fmt(add.length) + ' from the Stoic file'; ui.focusAfter = 'pick-' + g.id; VBS.setVars(g.id, g.vars.concat(add)); });
+  return el('div', { class: 'picker' }, [ el('span', { class: 'legend', text: 'Columns in ' + (state.stoic.fileName || 'the Stoic file') + ' (' + fmt(t.headerNames.length) + '). Added in file order.' }), search, list, el('div', { class: 'row-gap' }, [ addBtn, all ]) ]);
+}
+
+// ---------- export / import ----------
+function exportSettings(){
+  var data = VBS.exportData(), d = new Date(), nm = 'vb-report-groups-' + d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.json';
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  deliver(nm, blob).then(function(res){
+    ui.drawerMsg = res.status === 'saved' || res.status === 'started' ? { text: 'Exported ' + fmt(data.groups.length) + ' group' + (data.groups.length === 1 ? '' : 's') + ' to ' + nm + '.' } : res.status === 'declined' ? null : { bad: true, text: 'Couldn’t export: ' + (res.message || 'this view can’t save files.') };
+    if (ui.open) renderDrawer();
+  });
+}
+function readImport(file){
+  if (file.size > 5e6) { ui.drawerMsg = { bad: true, text: 'That file is too large to be a settings file.' }; renderDrawer(); return; }
+  file.text().then(function(txt){
+    var r = VBS.parseImport(txt);
+    if (r.error) { ui.drawerMsg = { bad: true, text: r.error }; ui.importPending = null; }
+    else { ui.drawerMsg = null; ui.importPending = { name: file.name, groups: r.groups }; }
+    renderDrawer();
+  });
+}
+function importBox(){
+  var p = ui.importPending, n = p.groups.length, v = p.groups.reduce(function(a, g){ return a + g.vars.length; }, 0);
+  return el('div', { class: 'import-box', role: 'dialog', 'aria-label': 'Import settings' }, [
+    el('strong', { text: 'Import ' + fmt(n) + ' group' + (n === 1 ? '' : 's') + ' (' + fmt(v) + ' variables) from ' + p.name + '?' }),
+    el('span', { text: '“Add” keeps your current groups; a name that already exists gets “(2)”. “Replace” removes your current groups first.' }),
+    el('div', { class: 'row-gap' }, [
+      el('button', { type: 'button', class: 'btn primary small', 'data-fid': 'imp-add', onclick: function(){ VBS.importGroups(p.groups, 'merge'); ui.importPending = null; ui.drawerMsg = { text: 'Added ' + fmt(n) + ' group' + (n === 1 ? '' : 's') + '.' }; renderDrawer(); } }, [ 'Add to my groups' ]),
+      el('button', { type: 'button', class: 'btn ghost', onclick: function(){ VBS.importGroups(p.groups, 'replace'); ui.importPending = null; ui.drawerMsg = { text: 'Replaced your groups with ' + fmt(n) + ' imported group' + (n === 1 ? '' : 's') + '.' }; renderDrawer(); } }, [ 'Replace my groups' ]),
+      el('button', { type: 'button', class: 'btn ghost', onclick: function(){ ui.importPending = null; renderDrawer(); } }, [ 'Cancel' ]) ]) ]);
+}
+renderGroups(); renderSaved();
+
+renderZone('r52'); renderZone('stoic'); refresh();
+window.__wcr = { state: function(){ return state; } };
+})();
+</script>
+</body>
+</html>
