@@ -217,7 +217,8 @@ td.mono{ white-space:nowrap; }
 .gcard-head{ all:unset; box-sizing:border-box; flex:1; min-width:0; min-height:56px; padding:10px 8px 10px 16px; display:flex; align-items:center; gap:10px; cursor:pointer; border-radius:12px; }
 .icon-btn.del:hover{ border-color:var(--err); color:var(--err); }
 .gcard-head:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
-.gcard-head .nm{ font-weight:600; overflow-wrap:anywhere; }
+.gcard-head .nm{ font-weight:600; overflow-wrap:break-word; min-width:0; }
+@media (max-width:480px){ .gcard-head{ flex-wrap:wrap; row-gap:2px; } .gcard-head .nm{ flex:1 1 100%; } .gcard-head .chev{ position:absolute; right:58px; } .gcard{ position:relative; } }
 .gcard-head .ct{ color:var(--muted); font-size:13px; white-space:nowrap; }
 .gcard-head .chev{ margin-left:auto; color:var(--muted); display:flex; transition:transform .15s; }
 .gcard-head[aria-expanded="true"] .chev{ transform:rotate(180deg); }
@@ -304,8 +305,8 @@ td.mono{ white-space:nowrap; }
   </div>
 </aside>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>
+<script id="xlsx-lib" src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script id="wcr-engine">
 /* Generate VB Report v2 — merge engine (Stoic variables come from a user-defined group). Pure functions; needs SheetJS (XLSX) only for parsing. */
 (function (root) {
   'use strict';
@@ -316,6 +317,8 @@ td.mono{ white-space:nowrap; }
     'Did Number', 'Call Unanswered At', 'Call Answered At', 'Journey Ref Number', 'Error Description',
     'Disposition Name', 'Followup Datetime', 'Transcript', 'Nach Interest', 'Nach Intent Notes'];
 
+  // Report 52 columns the tool uses for matching; every other column is simply carried through.
+  var R52_CORE = ['Id', 'Call Answered At', 'Call Unanswered At'];
   var DEFAULT_GROUP_VARS = ['app_downloaded', 'consent_to_proceed', 'customer_care_contacted', 'disposition',
     'documentation_duration', 'documentation_duration_raw', 'documentation_mode', 'documentation_mode_raw',
     'final_overall_rating_score', 'future_loan_consideration', 'future_loan_consideration_raw', 'identity_confirmed',
@@ -376,14 +379,26 @@ td.mono{ white-space:nowrap; }
     return true;
   }
 
+  // CSV text: UTF-8 (with or without BOM), UTF-16 LE/BE (Excel "Unicode Text"), else Windows-1252 as a last resort.
+  function decodeText(bytes) {
+    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+    if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+    var sample = bytes.subarray(0, Math.min(bytes.length, 4000)), zeros = 0;       // UTF-16 without BOM: every other byte is 0
+    for (var i = 1; i < sample.length; i += 2) if (sample[i] === 0) zeros++;
+    if (sample.length > 20 && zeros > sample.length / 4) return new TextDecoder('utf-16le').decode(bytes);
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch (e) { try { return new TextDecoder('windows-1252').decode(bytes); } catch (x) { return new TextDecoder('utf-8').decode(bytes); } }
+  }
+
   // ---------- parsing ----------
   function parseFile(XLSX, bytes, fileName) {
     var isCsv = /\.(csv|txt)$/i.test(fileName || '');
     var wb;
     if (isCsv) {
-      var text = new TextDecoder('utf-8').decode(bytes);
+      var text = decodeText(bytes);
       wb = XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true, cellDates: true });
     } else {
+      if (isZip(bytes)) assertZipComplete(bytes);
       wb = XLSX.read(bytes, { type: 'array', cellDates: false, cellNF: true, cellStyles: true });
     }
     var date1904 = !!(wb.Workbook && wb.Workbook.WBProps && wb.Workbook.WBProps.date1904);
@@ -430,8 +445,30 @@ td.mono{ white-space:nowrap; }
     }
   }
 
+  // A zip (and every .xlsx, which is a zip) must end with a valid "end of central directory" record whose
+  // directory lies inside the file. A cut-off download fails this check; without it the zip reader can
+  // loop forever on a truncated file and freeze the tab.
+  function assertZipComplete(bytes) {
+    var n = bytes.length;
+    if (n < 22) throw new Error('damaged zip: too short');
+    var stop = Math.max(0, n - 22 - 65535);
+    for (var i = n - 22; i >= stop; i--) {
+      if (bytes[i] === 0x50 && bytes[i + 1] === 0x4B && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+        var entries = bytes[i + 10] | (bytes[i + 11] << 8);
+        var size = (bytes[i + 12] | (bytes[i + 13] << 8) | (bytes[i + 14] << 16) | (bytes[i + 15] << 24)) >>> 0;
+        var off = (bytes[i + 16] | (bytes[i + 17] << 8) | (bytes[i + 18] << 16) | (bytes[i + 19] << 24)) >>> 0;
+        var zip64 = size === 0xFFFFFFFF || off === 0xFFFFFFFF || entries === 0xFFFF;
+        if (!zip64 && (off + size > i || entries === 0)) throw new Error('damaged zip: directory outside the file');
+        return;
+      }
+    }
+    throw new Error('damaged zip: incomplete file');
+  }
+  function isZip(bytes) { return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B && (bytes[2] === 3 || bytes[2] === 5 || bytes[2] === 7); }
+
   // Pull spreadsheet files out of a .zip (SheetJS's CFB reader handles ZIP containers).
   function unzip(XLSX, bytes) {
+    assertZipComplete(bytes);
     var z = XLSX.CFB.read(bytes, { type: 'array' }), out = [];
     for (var i = 0; i < z.FileIndex.length; i++) {
       var f = z.FileIndex[i], full = z.FullPaths[i] || f.name;
@@ -513,7 +550,15 @@ td.mono{ white-space:nowrap; }
     var hdr = sheets[found.sheet].rows[found.headerRow] || [];
     var names = [], seen = {};
     for (var q2 = 0; q2 < hdr.length; q2++) { var nm = cellText(hdr[q2]).replace(/^\uFEFF/, '').trim(), nk = normHeader(nm); if (nk && !seen[nk]) { seen[nk] = 1; names.push(nm); } }
+    var width = hdr.length; data.forEach(function (r) { if (r.length > width) width = r.length; });
+    var outCols = [], headerTexts = [];
+    for (var cc = 0; cc < width; cc++) {
+      var ht = cellText(hdr[cc]).replace(/^\uFEFF/, '').trim(), used = !!ht;
+      for (var rr2 = 0; !used && rr2 < data.length; rr2++) if (cellText(data[rr2][cc]).trim() !== '') used = true;
+      if (used) { outCols.push(cc); headerTexts.push(ht); }       // a column with no header but with data is kept too
+    }
     return { kind: kind, sheetName: sheets[found.sheet].name, map: found.hi.map, dups: found.hi.dups, rows: data, headerNames: names,
+      outCols: outCols, headerTexts: headerTexts,
       cols: sheets[found.sheet].cols || [], source: sheets[found.sheet].source,
       blankRowsSkipped: blanks, otherSheets: others };
   }
@@ -739,9 +784,13 @@ td.mono{ white-space:nowrap; }
       excluded.push(s);
     });
 
-    var header = R52_COLUMNS.concat(VARS);
-    var rMissing = missingOf(r52.map, R52_COLUMNS), sMissing = missingOf(stoic.map, VARS);
-    var rIdx = R52_COLUMNS.map(function (n) { return r52.map[normHeader(n)]; });
+    var rIdx = r52.outCols ? r52.outCols.slice() : R52_COLUMNS.map(function (n) { return r52.map[normHeader(n)]; });
+    var rNames = r52.outCols ? r52.headerTexts.slice() : R52_COLUMNS.slice();
+    var header = rNames.concat(VARS);
+    var rMissing = missingOf(r52.map, R52_CORE), sMissing = missingOf(stoic.map, VARS);
+    var stdKeys = {}; R52_COLUMNS.forEach(function (n) { stdKeys[normHeader(n)] = 1; });
+    var extraR52 = rNames.filter(function (n) { return n && !stdKeys[normHeader(n)]; });
+    var absentStd = R52_COLUMNS.filter(function (n) { return !Object.prototype.hasOwnProperty.call(r52.map, normHeader(n)); });
     var sIdx = VARS.map(function (n) { return stoic.map[normHeader(n)]; });
     var raw = all.map(function (a) {
       var line = rIdx.map(function (ix) { return ix === undefined ? null : a.row[ix]; });
@@ -751,7 +800,7 @@ td.mono{ white-space:nowrap; }
     var out = raw.map(function (r) { return r.map(cellText); });
     var widths = rIdx.map(function (ix) { return ix === undefined ? null : r52.cols[ix] || null; })
       .concat(sIdx.map(function (ix) { return ix === undefined ? null : stoic.cols[ix] || null; }));
-    var sources = R52_COLUMNS.map(function () { return 'r52:' + r52.source; }).concat(VARS.map(function () { return 'stoic:' + stoic.source; }));
+    var sources = rNames.map(function () { return 'r52:' + r52.source; }).concat(VARS.map(function () { return 'stoic:' + stoic.source; }));
 
 
     return {
@@ -766,7 +815,8 @@ td.mono{ white-space:nowrap; }
         bigGap: bigGap, untimed: untimed, notCompleted: notCompleted },
       unmatched: unmatched.map(function (a) { return { loan: cellText(get(r52, a.row, R.loan)), mobile: cellText(get(r52, a.row, R.mobile)), name: cellText(get(r52, a.row, 'Applicant Name')), reason: a.reason }; }),
       excluded: excluded.map(function (s) { return { loan: cellText(get(stoic, s.row, S.loan)), mobile: cellText(get(stoic, s.row, S.mobile)), name: cellText(get(stoic, s.row, 'customer_name')), reason: s.reason, expected: s.expected }; }),
-      columns: R52_COLUMNS.map(function (n) { return { name: n, source: 'Report 52', found: rMissing.indexOf(n) < 0 }; })
+      r52Count: rNames.length, extraR52: extraR52, absentStd: absentStd,
+      columns: rNames.map(function (n, k) { return { name: n || '(no header, column ' + (rIdx[k] + 1) + ')', source: 'Report 52', found: true, extra: !!(n && extraR52.indexOf(n) >= 0) }; })
         .concat(VARS.map(function (n) { return { name: n, source: 'Stoic', optional: true, found: sMissing.indexOf(n) < 0 }; })),
       missing: { r52: rMissing, stoic: sMissing },
       dupHeaders: { r52: r52.dups, stoic: stoic.dups },
@@ -812,7 +862,8 @@ td.mono{ white-space:nowrap; }
     var cols = m.widths.map(function (w) { return w && (w.wch || w.width) ? { wch: w.wch || w.width } : {}; });
     if (cols.some(function (x) { return x.wch; })) ws['!cols'] = cols;
     var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, String(m.sheetName || 'Sheet1').slice(0, 31) || 'Sheet1');
+    var sn = String(m.sheetName || '').replace(/[:\\\/?*\[\]]/g, ' ').replace(/^'+|'+$/g, '').trim().slice(0, 31) || 'Sheet1';   // Excel's sheet-name rules
+    XLSX.utils.book_append_sheet(wb, ws, sn);
     var data = XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: true });
     return { data: data, truncated: truncated };
   }
@@ -866,7 +917,7 @@ td.mono{ white-space:nowrap; }
   // Accept only well-formed data; repair what can be repaired, drop the rest.
   function sanitize(obj) {
     if (!obj || typeof obj !== 'object' || !Array.isArray(obj.groups)) return null;
-    var groups = [], ids = {}, names = {};
+    var groups = [], ids = Object.create(null), names = Object.create(null);
     obj.groups.forEach(function (g) {
       if (!g || typeof g !== 'object') return;
       var name = norm(g.name);
@@ -875,7 +926,8 @@ td.mono{ white-space:nowrap; }
       while (names[key(name)]) name = base + ' (' + (n++) + ')';
       var id = typeof g.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(g.id) && !ids[g.id] ? g.id : uid();
       ids[id] = 1; names[key(name)] = 1;
-      groups.push({ id: id, name: name, vars: root.WCR.cleanVars(Array.isArray(g.vars) ? g.vars.map(String) : []) });
+      var vars = Array.isArray(g.vars) ? g.vars.filter(function (v) { return typeof v === 'string' || (typeof v === 'number' && isFinite(v)); }).map(String) : [];
+      groups.push({ id: id, name: name, vars: root.WCR.cleanVars(vars) });
     });
     var recent = (Array.isArray(obj.recent) ? obj.recent : []).filter(function (x, i, a) { return typeof x === 'string' && ids[x] && a.indexOf(x) === i; }).slice(0, 20);
     var sel = typeof obj.selectedId === 'string' && ids[obj.selectedId] ? obj.selectedId : (recent[0] || (groups[0] && groups[0].id) || null);
@@ -1101,7 +1153,8 @@ function renderZone(slot){
       el('div', { class: 'file-meta' }, [
         el('span', { class: 'tag ' + (s.note ? 'warn' : 'ok'), text: LABEL[slot] + ' recognised' }),
         el('span', { class: 'fname', text: s.fileName }),
-        s.sheetNote ? el('span', { class: 'msg', style: 'color:var(--muted); font-size:13px', text: s.sheetNote }) : null
+        s.sheetNote ? el('span', { class: 'msg', style: 'color:var(--muted); font-size:13px', text: s.sheetNote }) : null,
+        s.colNote ? el('span', { class: 'msg', style: 'color:var(--muted); font-size:13px', text: s.colNote }) : null
       ])
     ]));
     if (s.note) inner.appendChild(el('div', { class: 'zone-note' }, [ icon('warn', '', 16), el('span', { text: s.note }) ]));
@@ -1141,40 +1194,39 @@ function handleFile(slot, file, count){
   setSlot(slot, { status: 'reading', fileName: name });
   announce('Reading ' + name);
   file.arrayBuffer().then(function(buf){
-    return new Promise(function(res){ setTimeout(function(){ res(buf); }, 40); });   // let "Reading…" paint first
-  }).then(function(buf){
+    return readBook(buf, name);
+  }).then(function(res){
     if (my !== tokens[slot]) return;
     var sheets, inner = null, id, other = slot === 'r52' ? 'stoic' : 'r52';
-    var isZip = /\.zip$/i.test(name);
-    if (isZip) {
-      var entries;
-      try { entries = WCR.unzip(XLSX, new Uint8Array(buf)); }
-      catch (err) { return setSlot(slot, { status: 'error', fileName: name, title: 'Couldn’t open this zip', msg: ['It may be damaged or password-protected. Unzip it and upload the file inside.'] }); }
+    if (res.timeout) return setSlot(slot, { status: 'error', fileName: name, title: 'Couldn’t read this file', msg: ['Reading it took too long, so it was stopped. The file may be damaged or incomplete: export or download it again.'] });
+    if (res.zip) {
+      if (res.error) return setSlot(slot, { status: 'error', fileName: name, title: 'Couldn’t open this zip', msg: [/damaged zip/.test(res.error) ? 'It looks incomplete or damaged (perhaps the download was cut off). Download it again.' : 'It may be damaged or password-protected. Unzip it and upload the file inside.'] });
+      var entries = res.entries;
       if (!entries.length) return setSlot(slot, { status: 'error', fileName: name, title: 'No spreadsheet in this zip', msg: ['The zip has no .xlsx, .xls or .csv file inside.'] });
       var mine = [], theirs = [], firstMiss = null;
       entries.forEach(function(en){
-        try { var sh = WCR.parseFile(XLSX, en.bytes, en.name), d = WCR.identify(sh);
-          if (d.kind === slot) mine.push({ en: en, sh: sh, id: d }); else if (d.kind === other) theirs.push(en.name); else if (!firstMiss) firstMiss = d; }
+        if (!en.sheets) return;
+        try { var d = WCR.identify(en.sheets);
+          if (d.kind === slot) mine.push({ en: en, sh: en.sheets, id: d }); else if (d.kind === other) theirs.push(en.name); else if (!firstMiss) firstMiss = d; }
         catch (e) {}
       });
-      if (my !== tokens[slot]) return;
       if (mine.length > 1) return setSlot(slot, { status: 'error', fileName: name, title: 'More than one ' + LABEL[slot] + ' in this zip',
         msg: ['Found ' + mine.length + ': ' + mine.map(function(x){ return x.en.name; }).join(', ') + '. Unzip it and upload one file.'] });
       if (!mine.length && theirs.length) return setSlot(slot, { status: 'error', fileName: name, title: 'Wrong file for this slot',
         msg: ['This zip holds a ' + LABEL[other] + '. Drop it on the ' + OTHER_SIDE[slot] + '.'] });
       if (!mine.length) { var mz = (firstMiss && firstMiss.missing[slot]) || [], pz = ['No ' + LABEL[slot] + ' found in this zip. Missing column' + (mz.length > 1 ? 's' : '') + ': '];
         mz.forEach(function(m, i){ if (i) pz.push(', '); pz.push(code(m)); }); pz.push('.');
+        if (!mz.length) pz = ['The spreadsheet inside couldn’t be read. It may be damaged.'];
         return setSlot(slot, { status: 'error', fileName: name, title: 'Not a ' + LABEL[slot], msg: pz }); }
       sheets = mine[0].sh; id = mine[0].id; inner = mine[0].en.name;
     } else {
-    try { sheets = WCR.parseFile(XLSX, new Uint8Array(buf), name); }
-    catch (err) {
-      var pw = /password|encrypt|ECMA-376|CFB/i.test(String(err && err.message));
-      return setSlot(slot, { status: 'error', fileName: name, title: pw ? 'Password-protected file' : 'Couldn’t read this file',
-        msg: [pw ? 'Remove the password in Excel, save, and upload again.' : 'It may be damaged or not a real spreadsheet. Export it again and retry.'] });
-    }
-    if (my !== tokens[slot]) return;
-    id = WCR.identify(sheets);
+      if (res.error) {
+        var pw = /password|encrypt|ECMA-376|CFB/i.test(res.error) && !/damaged zip/.test(res.error);
+        return setSlot(slot, { status: 'error', fileName: name, title: pw ? 'Password-protected file' : 'Couldn’t read this file',
+          msg: [pw ? 'Remove the password in Excel, save, and upload again.' : /damaged zip/.test(res.error) ? 'It looks incomplete or damaged (perhaps the download was cut off). Export it again.' : 'It may be damaged or not a real spreadsheet. Export it again and retry.'] });
+      }
+      sheets = res.sheets;
+      id = WCR.identify(sheets);
     }
     if (id.kind === other) return setSlot(slot, { status: 'error', fileName: name, title: 'Wrong file for this slot',
       msg: ['This looks like a ' + LABEL[other] + '. Drop it on the ' + OTHER_SIDE[slot] + '.'] });
@@ -1191,6 +1243,9 @@ function handleFile(slot, file, count){
     var s = { status: 'loaded', fileName: name, table: t, note: multi,
       sheetNote: inner ? 'Using ' + inner + ' from the zip' : sheets.length > 1 ? 'Using sheet “' + t.sheetName + '”' : null };
     if (slot === 'r52') {
+      var std = {}; WCR.R52_COLUMNS.forEach(function(n){ std[WCR.normHeader(n)] = 1; });
+      var extra = t.headerTexts.filter(function(h){ return h && !std[WCR.normHeader(h)]; }).length;
+      s.colNote = fmt(t.outCols.length) + ' columns' + (extra ? ' · ' + extra + ' beyond the usual layout, all carried over' : '');
       var ans = WCR.countAnswered(t);
       s.answered = ans;
       s.stats = [[t.rows.length, 'rows'], [ans, ans === 1 ? 'answered call' : 'answered calls']];
@@ -1210,6 +1265,43 @@ function handleFile(slot, file, count){
     setSlot(slot, { status: 'error', fileName: name, title: 'Couldn’t open this file', msg: ['Your browser couldn’t read it. Try saving it to your computer first.'] });
   });
 }
+
+// ---------- reading files off the main thread ----------
+// Every upload is read in a short-lived worker with a time limit, so a damaged file can never freeze the page
+// (the worker is simply stopped). If workers aren't available here, reading falls back to this thread.
+var workerSrc = null, workersOk = typeof Worker !== 'undefined' && typeof Blob !== 'undefined' && typeof URL !== 'undefined' && !!URL.createObjectURL;
+function buildWorker(){
+  if (!workerSrc) {
+    var lib = document.getElementById('xlsx-lib'), eng = document.getElementById('wcr-engine');
+    workerSrc = URL.createObjectURL(new Blob(['self.window = self; importScripts(' + JSON.stringify(lib.src) + ');\n', eng.textContent,
+      '\nself.onmessage = function (e) { var d = e.data, b = new Uint8Array(d.buf), out;' +
+      ' try { if (d.zip) { out = { zip: true, entries: WCR.unzip(XLSX, b).map(function (en) { try { return { name: en.name, sheets: WCR.parseFile(XLSX, en.bytes, en.name) }; } catch (x) { return { name: en.name, error: String(x && x.message) }; } }) }; }' +
+      ' else out = { zip: false, sheets: WCR.parseFile(XLSX, b, d.name) }; }' +
+      ' catch (err) { out = { zip: d.zip, error: String(err && err.message || err) }; } self.postMessage(out); };'], { type: 'text/javascript' }));
+  }
+  return new Worker(workerSrc);
+}
+function readHere(buf, name, zip){
+  try {
+    if (zip) return { zip: true, entries: WCR.unzip(XLSX, new Uint8Array(buf)).map(function(en){ try { return { name: en.name, sheets: WCR.parseFile(XLSX, en.bytes, en.name) }; } catch (x) { return { name: en.name, error: String(x && x.message) }; } }) };
+    return { zip: false, sheets: WCR.parseFile(XLSX, new Uint8Array(buf), name) };
+  } catch (err) { return { zip: zip, error: String(err && err.message || err) }; }
+}
+function readBook(buf, name){
+  var zip = /\.zip$/i.test(name), limit = window.__vbReadLimitMs || (30000 + Math.ceil(buf.byteLength / 1048576) * 2000);   // 30 s + 2 s per MB
+  return new Promise(function(resolve){
+    var w = null, done = false, timer = null;
+    function finish(v){ if (done) return; done = true; clearTimeout(timer); if (w) w.terminate(); resolve(v); }
+    function fallback(){ if (done) return; if (w) { w.terminate(); w = null; } clearTimeout(timer); workersOk = false; setTimeout(function(){ done = true; resolve(readHere(buf, name, zip)); }, 40); }
+    if (!workersOk) return fallback();
+    try { w = buildWorker(); } catch (e) { return fallback(); }
+    w.onmessage = function(e){ finish(e.data); };
+    w.onerror = function(ev){ if (ev && ev.preventDefault) ev.preventDefault(); fallback(); };   // worker couldn't start (e.g. blocked here)
+    timer = setTimeout(function(){ finish({ timeout: true }); }, limit);
+    try { w.postMessage({ buf: buf.slice(0), name: name, zip: zip }); } catch (e) { fallback(); }
+  });
+}
+window.__readBook = readBook;
 
 // ---------- CTA ----------
 var go = document.getElementById('go'), helper = document.getElementById('helper');
@@ -1331,7 +1423,8 @@ function renderResults(){
 
   // warnings
   var warns = [];
-  if (m.missing.r52.length) warns.push(missingNote('Report 52', m.missing.r52));
+  if (m.missing.r52.indexOf('Call Answered At') >= 0 || m.missing.r52.indexOf('Call Unanswered At') >= 0) warns.push(['Report 52 has no ', code(m.missing.r52.indexOf('Call Answered At') >= 0 ? 'Call Answered At' : 'Call Unanswered At'), ' column, so attempts of the same loan are matched by status and file order instead of call time.']);
+  if (m.missing.r52.indexOf('Id') >= 0) warns.push(['Report 52 has no ', code('Id'), ' column, so repeated rows of one attempt can’t be recognised as duplicates.']);
   if (m.dupHeaders.r52.length) warns.push(dupNote('Report 52', m.dupHeaders.r52));
   if (!c.answered) warns.push(['Report 52 has no ANSWERED calls, so no survey data was added. Every row is in the file with Stoic columns blank.']);
   if (c.blankRowsSkipped) warns.push(['Report 52 had ' + fmt(c.blankRowsSkipped) + ' empty ' + (c.blankRowsSkipped === 1 ? 'row' : 'rows') + ' between records. ' + (c.blankRowsSkipped === 1 ? 'It holds' : 'They hold') + ' no data and ' + (c.blankRowsSkipped === 1 ? 'was' : 'were') + ' skipped; every record is in the file.']);
@@ -1344,7 +1437,10 @@ function renderResults(){
   if (c.notCompleted) warns.push([fmt(c.notCompleted) + (c.notCompleted === 1 ? ' answered call was' : ' answered calls were') + ' matched to a Stoic call whose status isn’t “completed”. Its survey answers may be blank.']);
   if (c.untimed) warns.push([fmt(c.untimed) + (c.untimed === 1 ? ' match was' : ' matches were') + ' made without a usable call time (', code('Call Answered At'), ' / ', code('Call Attempt Time'), '). Pairing used loan ID and mobile only.']);
   if (warns.length) box.appendChild(el('div', { class: 'notes' }, warns.map(function(w){ return el('div', { class: 'note' }, [ icon('warn', 'ic', 16), el('span', {}, w) ]); })));
-  var gset = {}; m.header.slice(29).forEach(function(h){ gset[WCR.normHeader(h)] = 1; });
+  if (m.extraR52.length) box.appendChild(el('div', { class: 'info-line' }, [ icon('info', 'ic', 16), el('span', {}, [ 'Report 52 has ' + fmt(m.r52Count) + ' columns, including ' + m.extraR52.length + ' beyond the usual layout (',
+    m.extraR52.map(function(n){ return n; }).join(', '), '). All of them are in the file, in Report 52’s order.' ]) ]));
+  if (m.absentStd.length) box.appendChild(el('div', { class: 'info-line' }, [ icon('info', 'ic', 16), el('span', {}, [ 'This Report 52 doesn’t include ' + m.absentStd.join(', ') + ', so ' + (m.absentStd.length === 1 ? 'it isn’t' : 'they aren’t') + ' in the file either.' ]) ]));
+  var gset = {}; m.header.slice(m.r52Count).forEach(function(h){ gset[WCR.normHeader(h)] = 1; });
   var twice = m.dupHeaders.stoic.filter(function(n){ return gset[WCR.normHeader(n)]; });
   if (twice.length) box.appendChild(el('div', { class: 'info-line' }, [ icon('info', 'ic', 16), el('span', {}, [
     twice.length === 1 ? code(twice[0]) : twice.map(function(n, i){ return (i ? ', ' : '') + n; }).join(''),
@@ -1374,6 +1470,7 @@ function renderResults(){
   var colBody = el('div', { class: 'row-body', hidden: '' }, [ el('div', { class: 'colgrid' }, ['Report 52', 'Stoic'].map(function(src){
     return el('div', {}, [ el('h4', { text: src === 'Stoic' ? 'From Stoic · ' + (m.groupName || '') : 'From ' + src }), el('ul', { class: 'collist' }, m.columns.filter(function(x){ return x.source === src; }).map(function(x){
       if (!x.found && x.optional) return el('li', { style: 'color:var(--muted)' }, [ el('span', { style: 'width:14px; display:inline-block', 'aria-hidden': 'true', text: '–' }), el('span', { text: x.name }), el('span', { style: 'font-family:var(--sans)', text: '· not in this Stoic file, left blank' }) ]);
+      if (x.source === 'Report 52' && x.extra) return el('li', {}, [ icon('check', 'ic-ok', 14), el('span', { text: x.name }), el('span', { style: 'font-family:var(--sans); color:var(--muted)', text: '· beyond the usual layout' }) ]);
       var dup = x.source === 'Stoic' && m.dupHeaders.stoic.some(function(n){ return WCR.normHeader(n) === WCR.normHeader(x.name); });
       return el('li', { class: x.found ? '' : 'miss' }, [ icon(x.found ? 'check' : 'warn', x.found ? 'ic-ok' : 'ic-warn', 14), el('span', { text: x.name }),
         x.found ? (dup ? el('span', { style: 'font-family:var(--sans); color:var(--muted)', text: '· call’s result (the file has this column twice)' }) : null) : el('span', { style: 'font-family:var(--sans)', text: '· missing, left blank' }) ]);
@@ -1462,7 +1559,8 @@ Object.assign(ICON, {
 });
 VBS.init();
 var ui = { open: false, openId: null, confirmDel: null, picker: {}, notes: {}, importPending: null, drawerMsg: null, returnFocus: null };
-var R52_KEYS = {}; WCR.R52_COLUMNS.forEach(function(n){ R52_KEYS[WCR.normHeader(n)] = 1; });
+function r52Keys(){ var k = {}, t = state.r52.status === 'loaded' ? state.r52.table : null;
+  (t ? t.headerTexts : WCR.R52_COLUMNS).forEach(function(n){ if (n) k[WCR.normHeader(n)] = 1; }); return k; }
 
 function stoicKeys(){ var t = state.stoic.status === 'loaded' ? state.stoic.table : null; if (!t) return null; var k = {}; Object.keys(t.map).forEach(function(x){ k[x] = 1; }); return k; }
 function inFile(vars, keys){ return vars.filter(function(v){ return keys[WCR.normHeader(v)]; }).length; }
@@ -1644,12 +1742,12 @@ function varList(g, keys){
   var ul = el('ul', { class: 'vlist', 'aria-label': 'Variables in ' + g.name }), dragFrom = null;
   function move(from, to){ if (to < 0 || to >= g.vars.length || from === to) return; var v = g.vars.slice(), x = v.splice(from, 1)[0]; v.splice(to, 0, x); return v; }
   g.vars.forEach(function(name, i){
-    var clash = R52_KEYS[WCR.normHeader(name)];
+    var clash = r52Keys()[WCR.normHeader(name)];
     var li = el('li', { draggable: 'true' }, [
       el('span', { class: 'grip', html: svg('grip', 16), title: 'Drag to reorder' }),
       el('span', { class: 'ix', text: String(i + 1) }),
       keys ? el('span', { class: 'dot ' + (keys[WCR.normHeader(name)] ? 'in' : 'out'), title: keys[WCR.normHeader(name)] ? 'In the uploaded Stoic file' : 'Not in the uploaded Stoic file — will be blank' }) : null,
-      el('span', { class: 'vn' }, [ name, clash ? el('div', { class: 'clash', text: 'Also a Report 52 column: the output will have two columns with this name' }) : null ]),
+      el('span', { class: 'vn' }, [ name, clash ? el('div', { class: 'clash', text: 'Also a Report 52 column: the output will have two columns with this name (one from each file)' }) : null ]),
       el('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Move ' + name + ' up', 'data-fid': 'up-' + g.id + '-' + i, disabled: i === 0 ? '' : null, html: svg('mvup', 16),
         onclick: function(){ ui.focusAfter = 'up-' + g.id + '-' + Math.max(1, i - 1); if (i - 1 === 0) ui.focusAfter = 'down-' + g.id + '-0'; VBS.setVars(g.id, move(i, i - 1)); } }),
       el('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Move ' + name + ' down', 'data-fid': 'down-' + g.id + '-' + i, disabled: i === g.vars.length - 1 ? '' : null, html: svg('mvdown', 16),
