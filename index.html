@@ -343,6 +343,9 @@ td.mono{ white-space:nowrap; }
 
   var HEADER_SCAN_ROWS = 25;
   var TIME_GAP_WARN_MS = 30 * 60 * 1000;
+  // A Report 52 outcome and its Stoic call are logged seconds apart (≤1 s in every real batch). Calls further
+  // apart than this are never paired, so a missing call can't be "filled" from another attempt.
+  var MATCH_WINDOW_MS = 10 * 60 * 1000;
 
   // Header names: trim, collapse inner whitespace, case-insensitive. Underscores are NOT
   // folded into spaces, so Report 52's "Client Loan Id" never collides with Stoic's "client_loan_id".
@@ -619,6 +622,12 @@ td.mono{ white-space:nowrap; }
     return Date.UTC(y, mo - 1, d, h, mi, s, ms) - off * 60000;
   }
 
+  function nearestMin(t, list) {
+    if (t === null) return null; var best = null;
+    list.forEach(function (x) { if (x !== null && x !== undefined) { var d = Math.abs(x - t) / 60000; if (best === null || d < best) best = d; } });
+    return best;
+  }
+  function fmtMin(m) { return m < 90 ? Math.round(m) + ' min' : (Math.round(m / 6) / 10) + ' h'; }
   function istDate(ms) {
     var u = new Date(ms + 330 * 60000);
     return u.getUTCFullYear() + '-' + pad(u.getUTCMonth() + 1) + '-' + pad(u.getUTCDate());
@@ -678,7 +687,7 @@ td.mono{ white-space:nowrap; }
     // Every Report 52 row is kept. Only ANSWERED rows take part in matching; ANSWERED rows repeating
     // the same Id (the attempt key) are duplicates of one attempt and share its Stoic match.
     var unansPool = [], unansById = {};
-    var all = [], answered = [], primaries = [], firstById = {}, typeCounts = {}, typeOrder = [], allKeys = {}, allLoans = {};
+    var all = [], answered = [], primaries = [], firstById = {}, typeCounts = {}, typeOrder = [], allKeys = {}, allLoans = {}, timesByKey = {}, hasOutcome = {};
     for (var i = 0; i < r52.rows.length; i++) {
       var row = r52.rows[i];
       var at = cellText(get(r52, row, 'Action Type')).trim().toUpperCase() || '(BLANK)';
@@ -688,6 +697,12 @@ td.mono{ white-space:nowrap; }
       var key = lk && mk ? lk + '|' + mk : null;
       if (lk) allLoans[lk] = true;
       if (key) (allKeys[key] || (allKeys[key] = {}))[at] = true;
+      var rid = cellText(get(r52, row, 'Id')).trim().toLowerCase();
+      if (rid && at !== 'SENT') hasOutcome[rid] = true;
+      var when = at === 'ANSWERED' ? parseTime(get(r52, row, R.time), R.tzMinutes) : at === 'UNANSWERED' ? parseTime(get(r52, row, 'Call Unanswered At'), R.tzMinutes)
+        : (parseTime(get(r52, row, 'Sent At'), R.tzMinutes) || parseTime(get(r52, row, 'Created At'), R.tzMinutes));
+      if (when !== null && when < Date.UTC(2000, 0, 1)) when = null;        // placeholder dates (e.g. 1970) on dial failures
+      if (key) (timesByKey[key] || (timesByKey[key] = [])).push({ type: at, t: when, id: rid });
       var rec = { i: i, row: row, loan: lk, mob: mk, key: key, type: at, match: null, reason: null, dupOf: null };
       all.push(rec);
       if (at === 'UNANSWERED') {
@@ -728,11 +743,13 @@ td.mono{ white-space:nowrap; }
     Object.keys(groups).forEach(function (k) {
       var g = groups[k];
       if (!g.a.length || !g.s.length) return;
-      if (g.a.length === 1 && g.s.length === 1 && g.a[0].type === 'ANSWERED') { pair(g.a[0], g.s[0]); return; }
+      var inWin = function (a, s) { return a.t === null || s.t === null || Math.abs(a.t - s.t) <= MATCH_WINDOW_MS; };
+      if (g.a.length === 1 && g.s.length === 1 && g.a[0].type === 'ANSWERED') { if (inWin(g.a[0], g.s[0])) pair(g.a[0], g.s[0]); return; }
       var pairs = [];
       g.a.forEach(function (a) {
         g.s.forEach(function (s) {
           var d = (a.t !== null && s.t !== null) ? Math.abs(a.t - s.t) : Infinity;
+          if (d !== Infinity && d > MATCH_WINDOW_MS) return;               // too far apart to be the same call
           var agree = (a.type === 'ANSWERED') === !!s.answered;
           pairs.push({ a: a, s: s, d: d, timed: d !== Infinity ? 0 : 1, bucket: d !== Infinity ? Math.round(d / 60000) : 0, agree: agree ? 0 : 1 });
         });
@@ -761,7 +778,11 @@ td.mono{ white-space:nowrap; }
       if (a.match) return;
       if (a.dupOf) { a.reason = 'Duplicate of another ANSWERED row (same Id): ' + (a.dupOf.reason || 'no Stoic match'); unmatched.push(a); return; }
       if (!a.key) a.reason = !a.loan ? 'Loan ID is blank' : 'Mobile number is blank';
-      else if (groups[a.key] && groups[a.key].s.length) a.reason = 'Extra answered call: more answered calls than Stoic calls for this loan + mobile';
+      else if (groups[a.key] && groups[a.key].s.length) {
+        var near = nearestMin(a.t, groups[a.key].s.map(function (x) { return x.t; }));
+        a.reason = near !== null && near > MATCH_WINDOW_MS / 60000 ? 'No Stoic call at this attempt’s time (nearest is ' + fmtMin(near) + ' away)'
+          : 'Extra answered call: more answered calls than Stoic calls for this loan + mobile';
+      }
       else if (stoicLoans[a.loan]) a.reason = 'Loan ID found in Stoic, but mobile number differs';
       else a.reason = 'Loan ID not in Stoic Report';
       unmatched.push(a);
@@ -775,6 +796,15 @@ td.mono{ white-space:nowrap; }
       }
       if (!s.answered) { s.expected = true; s.reason = 'Not answered in Stoic (Call Status: ' + (s.status || 'blank') + ')'; excluded.push(s); return; }
       if (!s.key) s.reason = !s.loan ? 'Loan ID is blank' : 'Mobile number is blank';
+      else if (s.t !== null && timesByKey[s.key]) {
+        var hits = timesByKey[s.key].filter(function (x) { return x.t !== null && Math.abs(x.t - s.t) <= MATCH_WINDOW_MS; });
+        var pend = hits.filter(function (x) { return x.type === 'SENT' && x.id && !hasOutcome[x.id]; });
+        if (pend.length) s.reason = 'Report 52 has only the SENT row for this attempt (outcome not exported yet)';
+        else if (hits.some(function (x) { return x.type === 'UNANSWERED'; })) s.reason = 'Report 52 marks this attempt UNANSWERED (Stoic says completed)';
+        else if (hits.some(function (x) { return x.type === 'ANSWERED'; })) s.reason = 'Extra Stoic call for this attempt';
+        else { var nm = nearestMin(s.t, timesByKey[s.key].map(function (x) { return x.t; }));
+          s.reason = nm === null ? 'Report 52 has no timed row for this loan + mobile' : 'No Report 52 attempt at this time (nearest is ' + fmtMin(nm) + ' away)'; }
+      }
       else if (groups[s.key] && groups[s.key].a.length) s.reason = 'Extra Stoic call for this loan + mobile';
       else if (allKeys[s.key] && allKeys[s.key].UNANSWERED) s.reason = 'Report 52 marks this call UNANSWERED';
       else if (allKeys[s.key] && allKeys[s.key].SENT && Object.keys(allKeys[s.key]).length === 1) s.reason = 'Report 52 has no outcome row yet for this loan (only SENT)';
